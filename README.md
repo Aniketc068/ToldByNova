@@ -109,6 +109,15 @@ A fully automated YouTube Shorts factory controlled entirely from Telegram. AI g
 - Custom thumbnail upload via YouTube API
 - Community post text generation
 
+### Multi-System Instance Lock + Data Sync
+- Run the bot on multiple systems (HOME, OFFICE, LAPTOP, etc.) without conflicts
+- Google Doc acts as a live ON/OFF switch - write `HOME=ON` / `OFFICE=OFF` to control which system runs
+- Bot reads the doc every 5 seconds - if turned OFF, shuts down instantly with Telegram notification
+- Google Drive data sync - all `data/` config files sync to Drive every 10 seconds
+- On startup, bot downloads latest data from Drive so the new system continues where the last one left off
+- One-time OAuth setup per system via `/auth_drive` command
+- Add unlimited systems - just add `system_NAME=ip1,ip2` in `.env`
+
 ### Bot Management
 - Multi-user access control (admin + invited users)
 - Live slot countdown reminders (updated every 30s, color-coded progress bar)
@@ -149,12 +158,18 @@ Telegram Bot (telegram_automation.py - 4700+ lines)
     |     +-- Resumable chunked upload with retry
     |
     +-- Post-Upload PRO Features (all automatic)
-          +-- Multilingual captions (5 languages)
-          +-- Playlist management
-          +-- Pinned comment (deferred until public)
-          +-- Auto-reply comments (60 min window)
-          +-- A/B title testing (48h check)
-          +-- AI thumbnail + upload
+    |     +-- Multilingual captions (5 languages)
+    |     +-- Playlist management
+    |     +-- Pinned comment (deferred until public)
+    |     +-- Auto-reply comments (60 min window)
+    |     +-- A/B title testing (48h check)
+    |     +-- AI thumbnail + upload
+    |
+    +-- Multi-System Lock + Sync
+          +-- Google Doc ON/OFF switch (5s polling)
+          +-- Google Drive data sync (10s interval)
+          +-- Auto-download on startup, auto-upload on change
+          +-- Instant shutdown when turned OFF via doc
 ```
 
 ---
@@ -278,6 +293,21 @@ python scripts/telegram_automation.py
 | `OLLAMA_MODEL` | No | AI model (default: `gemma4:31b-cloud`) |
 | `OLLAMA_API` | No | API endpoint (default: `https://api.ollama.com/api/chat`) |
 | `NOVA_PROJECT` | No | Project root path (auto-detected if not set) |
+
+#### Bot Config File (`assets/channel/.env`)
+
+Separate from environment variables, the bot also reads `assets/channel/.env` for project-level config:
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `lock_doc` | No | Google Doc URL for multi-system ON/OFF switch |
+| `lock_check_interval` | No | How often to check the doc (default: 5 seconds) |
+| `system_NAME` | No | System IPs — `system_HOME=192.168.1.64,192.168.1.72` |
+| `github` | No | GitHub personal access token (for private repo backup) |
+| `public_repo` | No | Public GitHub repo URL |
+| `private_repo` | No | Private GitHub repo URL |
+
+See `assets/channel/.env.example` for a full template.
 
 ---
 
@@ -448,7 +478,73 @@ The bot automatically selects different voices based on story mood - no manual v
 
 ---
 
-### Step 11: Run the Bot
+### Step 11: Multi-System Instance Lock + Data Sync (Optional)
+
+Run the bot on multiple systems (home PC, office PC, laptop) without conflicts. A shared Google Doc acts as a live switch - only one system runs at a time, and data syncs automatically via Google Drive.
+
+#### 11a: Configure Systems in `.env`
+
+Edit `assets/channel/.env` (copy from `.env.example`):
+
+```env
+# Google Doc ON/OFF switch
+# Create a Google Doc, share with "Anyone with the link can view"
+lock_doc=https://docs.google.com/document/d/YOUR_DOC_ID/edit
+lock_check_interval=5
+
+# Add your systems - find IPs with: ipconfig (Windows) or ip addr (Linux)
+system_HOME=192.168.1.64,192.168.1.72
+system_OFFICE=10.0.0.50,10.0.0.51
+# system_LAPTOP=192.168.0.200
+```
+
+- `lock_doc` — URL of your shared Google Doc
+- `lock_check_interval` — how often to check the doc (seconds, default 5)
+- `system_NAME=ip1,ip2` — each system's name and its local IP addresses (LAN + WiFi)
+
+You can add as many systems as you want. The bot detects which system it's running on by matching local IPs.
+
+#### 11b: Set Up the Google Doc
+
+Create a Google Doc and share it with **"Anyone with the link can view"**. Write one line per system:
+
+```
+HOME=ON
+OFFICE=OFF
+```
+
+To switch systems: change `HOME=OFF` and `OFFICE=ON` in the doc. The running bot detects the change within 5 seconds, sends a Telegram message "Shutting down from HOME", and exits. Then start the bot on the other system.
+
+#### 11c: Enable Google Drive API
+
+1. Go to [Google Cloud Console API Library](https://console.cloud.google.com/apis/library)
+2. Select the same project used for YouTube API
+3. Search **"Google Drive API"** → Click **Enable**
+4. That's it — the same OAuth credentials (`yt_client_secret_1.json`) work for Drive too
+
+#### 11d: Authorize Google Drive (One-Time Per System)
+
+1. Start the bot on the system
+2. Send `/auth_drive` in Telegram
+3. Bot sends an OAuth URL → open in browser → authorize → copy the code
+4. Paste the code in Telegram chat
+5. Bot saves the Drive token — sync is now active
+
+After authorization, the bot:
+- **On startup**: downloads all data files from Google Drive (gets latest state from whichever system ran last)
+- **Every 10 seconds**: checks for changed files and uploads only what changed
+- **On shutdown**: does a final forced sync to Drive
+
+#### 11e: Switching Between Systems
+
+```
+1. Change Google Doc: HOME=OFF, OFFICE=ON
+2. HOME bot detects OFF → syncs data to Drive → shuts down
+3. Start bot on OFFICE → downloads data from Drive → continues where HOME left off
+4. All story history, upload schedule, pending jobs carry over seamlessly
+```
+
+### Step 12: Run the Bot
 
 **Option A: Batch file (Windows)**
 ```bash
@@ -465,11 +561,11 @@ python scripts/bot_service.py
 python scripts/telegram_automation.py
 ```
 
-The bot sends you a startup message on Telegram with status info.
+The bot sends you a startup message on Telegram with status info. If instance lock is configured, the message shows `Lock: HOME | Sync: ON`.
 
 ---
 
-### Step 12: Auto-Start on System Boot (Windows Task Scheduler)
+### Step 13: Auto-Start on System Boot (Windows Task Scheduler)
 
 So the bot starts automatically when your PC turns on:
 
@@ -612,7 +708,7 @@ Videos upload as private 2-3 hours before slot time for algorithm indexing, then
 ```
 ToldByNova/
 +-- scripts/
-|   +-- telegram_automation.py   # Main bot (4700+ lines)
+|   +-- telegram_automation.py   # Main bot (5100+ lines)
 |   +-- pipeline.py              # Video build pipeline (FFmpeg)
 |   +-- voice_generator.py       # ElevenLabs + Edge TTS voice
 |   +-- bot_service.py           # Auto-restart service wrapper
@@ -627,8 +723,11 @@ ToldByNova/
 |   +-- clips_default/           # Default video clips (5-10 clips)
 |   +-- clips_manual/            # User-uploaded clips (auto-managed)
 |   +-- channel/                 # Channel branding (logo, fonts)
+|   |   +-- .env                 # Config: GitHub, lock doc, system IPs (gitignored)
+|   |   +-- .env.example         # Template with placeholder values
 |   +-- subscribe.mp4            # Subscribe overlay (green screen)
 +-- data/                        # Runtime data (auto-created, gitignored)
+|   +-- gdrive_token.json        # Google Drive OAuth (per-system, gitignored)
 +-- output/                      # Built videos (auto-created, gitignored)
 +-- credentials.json             # YouTube OAuth2 (gitignored)
 +-- token.json                   # YouTube auth token (gitignored)
@@ -738,6 +837,14 @@ This exact system runs the bot 24/7 producing 4 videos/day with zero issues. FFm
 | `/voice` | Show current voice engine and settings. | To check active voice |
 | `/voice_id <id>` | Change the ElevenLabs voice ID (get from elevenlabs.io voice settings). | To use a different voice |
 
+### Multi-System Lock + Sync
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/auth_drive` | One-time Google Drive OAuth. Bot sends you a URL, open in browser, authorize, paste the code back in chat. Enables data sync between systems. | First-time setup on each system |
+| `/bot_lock` | Show instance lock status - this system's name, IPs, Google Doc status (who is ON/OFF), and Drive sync status. | To check which system is active |
+| `/sync_now` | Force immediate sync of all data files to Google Drive (normally syncs every 10 seconds automatically). | When you want to push data right now before switching systems |
+
 ---
 
 ## Troubleshooting
@@ -756,6 +863,10 @@ This exact system runs the bot 24/7 producing 4 videos/day with zero issues. FFm
 | Video too long | Use `/duration 35` or `/duration auto` for 33-38s |
 | Story not USA-focused | AI prompt is pre-configured for USA. Custom stories via `/story` should be USA-relatable |
 | Bot starts twice on reboot | Check Task Scheduler for duplicate tasks. Keep only one. |
+| Bot shuts down immediately | Check Google Doc - your system might be set to OFF. Use `/bot_lock` to see status |
+| Drive sync not working | Run `/auth_drive` first. Ensure Google Drive API is enabled in Cloud Console |
+| "UNKNOWN" system detected | Your IP doesn't match any `system_NAME` in `.env`. Run `ipconfig` and update `.env` |
+| Doc read failed (500 error) | Google rate-limits frequent requests. Bot auto-retries with backoff. Normal behavior |
 
 ---
 
