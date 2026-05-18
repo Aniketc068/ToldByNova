@@ -79,7 +79,7 @@ A fully automated YouTube Shorts factory controlled entirely from Telegram. AI g
 | Suspense / Dark / Horror | Lily | Velvety, dramatic |
 | Dramatic / Revenge / Justice | Sarah | Mature, confident (default) |
 | Happy / Upbeat / Funny | Jessica | Playful, bright |
-| Emotional / Sad / Heartfelt | Elise | Warm, natural |
+| Emotional / Sad / Heartfelt | Matilda | Warm, professional |
 | Mysterious / Twist | Laura | Enthusiastic, quirky |
 
 ### Video Pipeline (FFmpeg)

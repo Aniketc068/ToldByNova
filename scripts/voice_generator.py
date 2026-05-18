@@ -19,9 +19,9 @@ _MOOD_VOICES = {
     "happy":       ("cgSgspJ2msm6clMCkdW9", "Jessica"),     # Playful, Bright, Warm
     "upbeat":      ("cgSgspJ2msm6clMCkdW9", "Jessica"),
     "funny":       ("cgSgspJ2msm6clMCkdW9", "Jessica"),
-    "emotional":   ("EST9Ui6982FZPSi7gCHi", "Elise"),       # Warm, Natural, Engaging
-    "sad":         ("EST9Ui6982FZPSi7gCHi", "Elise"),
-    "heartfelt":   ("EST9Ui6982FZPSi7gCHi", "Elise"),
+    "emotional":   ("XrExE9yKIg1WjnnlVkGX", "Matilda"),     # Warm, Professional (free)
+    "sad":         ("XrExE9yKIg1WjnnlVkGX", "Matilda"),
+    "heartfelt":   ("XrExE9yKIg1WjnnlVkGX", "Matilda"),
     "mysterious":  ("FGY2WhTYpPnrIDTdsKH5", "Laura"),       # Enthusiast, Quirky
     "twist":       ("FGY2WhTYpPnrIDTdsKH5", "Laura"),
 }
