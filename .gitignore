@@ -73,3 +73,7 @@ scripts/telegram_automation_backup_*.py
 models/
 docs/
 tools/
+
+# Large binaries
+ffmpeg/
+assets/work_*/

@@ -137,7 +137,6 @@ class BotState:
         self._clip_status_msg = None
         self.short_seo = None
         self.clip_suggestions = None
-        self.thumb_ai_bg = None
         self.load()
 
     def load(self):
@@ -155,7 +154,6 @@ class BotState:
         self.max_duration = d.get("max_duration", 0)
         self.short_seo = _sanitize_saved_seo(d.get("short_seo"))
         self.clip_suggestions = d.get("clip_suggestions")
-        self.thumb_ai_bg = d.get("thumb_ai_bg")
 
     def save(self):
         save_json(STATE_FILE, {
@@ -172,7 +170,6 @@ class BotState:
             "max_duration": self.max_duration,
             "short_seo": self.short_seo,
             "clip_suggestions": self.clip_suggestions,
-            "thumb_ai_bg": self.thumb_ai_bg,
         })
 
     def reset_for_new_video(self):
@@ -3986,7 +3983,7 @@ def handle_message(msg):
         bot._clip_status_msg = None
         if bot.state in ["CLIPS_COLLECTING", "CLIPS_READY"]:
             bot.state = "CLIPS_COLLECTING"
-            bot.save()
+        bot.save()
         send(f"Cleared {deleted} clips. Send new clips.",
              reply_markup=btn(("Clips", "/clips")))
         return
@@ -4226,7 +4223,7 @@ def handle_message(msg):
     # ---- CLIP COLLECTION ----
 
     if text_lower == "/clips":
-        if bot.state not in ["STORY_APPROVED", "CLIPS_COLLECTING"]:
+        if bot.state not in ["STORY_APPROVED", "CLIPS_COLLECTING", "VOICE_DONE"]:
             if not bot.current_script:
                 send("No story approved yet.",
                      reply_markup=btn(("Auto", "/auto"), ("Story", "/story")))
@@ -4541,18 +4538,6 @@ def handle_message(msg):
             bot.save()
 
             send_and_notify(f"Story approved: <b>{title}</b>\nMood: {bot.mood}\n\nGenerating voice + subtitles...")
-
-            def _pre_generate_thumbnail():
-                try:
-                    thumb_path = generate_thumbnail(title, mood=bot.mood)
-                    if thumb_path:
-                        bot.thumb_ai_bg = thumb_path
-                        bot.save()
-                        print(f"[THUMB] Pre-generated thumbnail: {thumb_path}")
-                except Exception as e:
-                    print(f"[THUMB] Pre-generation failed (will retry at upload): {e}")
-
-            threading.Thread(target=_pre_generate_thumbnail, daemon=True).start()
 
             _generate_voice_for_current()
 

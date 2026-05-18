@@ -341,15 +341,14 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
 
     # BGM tracks are shorter (~1-2min), so we loop them
     bgm_dur = dur(music_file)
+    bgm_start = bgm_dur / 2
     loops_needed = int(adur / bgm_dur) + 2
 
-    input_args = ['-i', voice_mp3, '-stream_loop', str(loops_needed), '-i', music_file]
+    input_args = ['-i', voice_mp3, '-ss', str(bgm_start), '-stream_loop', str(loops_needed), '-i', music_file]
     input_idx = 2
 
-    BGM_DELAY_MS = 15000
     audio_filter = (
-        f"[1:a]atrim=0:{adur+2},asetpts=PTS-STARTPTS,volume=0.18,"
-        f"adelay={BGM_DELAY_MS}|{BGM_DELAY_MS},afade=t=in:st=15:d=3[m];"
+        f"[1:a]atrim=0:{adur+2},asetpts=PTS-STARTPTS,volume=0.18[m];"
         f"[0:a]volume=1.8[v];"
         f"[v][m]amix=inputs=2:duration=first:dropout_transition=2[base];"
     )
