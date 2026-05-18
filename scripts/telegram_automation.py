@@ -34,8 +34,6 @@ OLLAMA_API = os.environ.get("OLLAMA_API", "https://api.ollama.com/api/chat")
 OLLAMA_KEY = os.environ.get("OLLAMA_API_KEY", "")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:31b-cloud")
 
-CLI_TOOLS = ["trexocli", "claude", "codex"]
-_active_cli = None
 _last_ai_source = "Ollama"
 _ollama_last_call = 0
 _ollama_calls_minute = []
@@ -1503,30 +1501,6 @@ def ollama_run(prompt, timeout=180):
 
 # ============ CLI AI (claude / codex / trexocli) + OLLAMA FALLBACK ============
 
-def _detect_cli():
-    """Check which CLI AI tools are installed and log them at startup."""
-    found = []
-    for tool in CLI_TOOLS:
-        try:
-            r = subprocess.run([tool, "--version"], capture_output=True, text=True,
-                               timeout=15, stdin=subprocess.DEVNULL)
-            if r.returncode == 0:
-                ver = r.stdout.strip().split('\n')[0]
-                found.append(f"{tool} ({ver})")
-            else:
-                print(f"[AI] {tool} --version failed (rc={r.returncode})")
-        except subprocess.TimeoutExpired:
-            print(f"[AI] {tool} --version timed out")
-        except FileNotFoundError:
-            pass
-        except Exception as e:
-            print(f"[AI] {tool} check error: {e}")
-    if found:
-        print(f"[AI] CLI tools found: {', '.join(found)}")
-    else:
-        print("[AI] No CLI tools found - will use Ollama only")
-    return found
-
 STORY_SYSTEM_PROMPT = (
     "You are a viral story writer for YouTube channel 'Told By Nova'. "
     "You write ONLY about: revenge, karma, cheating, betrayal, court cases, neighbor wars, "
@@ -1538,92 +1512,9 @@ STORY_SYSTEM_PROMPT = (
     "Output ONLY raw JSON. No markdown, no code blocks."
 )
 
-def _try_cli(tool, prompt, timeout=120):
-    """Try a single CLI tool — returns result_text or None."""
-    import tempfile
-    tmp_dir = tempfile.mkdtemp()
-    # Windows command-line limit is ~8191 chars. For long prompts, use stdin instead of -p.
-    use_stdin = len(prompt) + len(STORY_SYSTEM_PROMPT) > 7000
-    if use_stdin:
-        args = [tool, "--output-format", "json", "--max-turns", "1",
-                "--append-system-prompt", STORY_SYSTEM_PROMPT]
-    else:
-        args = [tool, "--output-format", "json", "--max-turns", "1",
-                "--append-system-prompt", STORY_SYSTEM_PROMPT, "-p", prompt]
-    print(f"[{tool}] Starting (timeout={timeout}s, prompt={len(prompt)} chars, stdin={use_stdin})...")
-    sys.stdout.flush()
-    def _log_cli(msg):
-        print(msg); sys.stdout.flush()
-        try:
-            with open(f"{DATA_DIR}/cli_debug.log", "a", encoding="utf-8") as _lf:
-                _lf.write(f"{msg}\n")
-        except: pass
-    _log_cli(f"[{tool}] START timeout={timeout} prompt_len={len(prompt)} stdin={use_stdin}")
-    try:
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        if use_stdin:
-            r = subprocess.run(args, input=prompt, capture_output=True, text=True,
-                               timeout=timeout, cwd=tmp_dir, encoding='utf-8', errors='replace',
-                               env=env)
-        else:
-            r = subprocess.run(args, capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                               timeout=timeout, cwd=tmp_dir, encoding='utf-8', errors='replace',
-                               env=env)
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-        if r.returncode != 0:
-            err = (r.stderr or r.stdout or '')[-300:]
-            _log_cli(f"[{tool}] FAIL rc={r.returncode}: {err}")
-            return None
-
-        stdout = r.stdout.strip()
-        _log_cli(f"[{tool}] Got {len(stdout)} chars output")
-        for line in stdout.split('\n'):
-            line = line.strip()
-            if line.startswith('{'):
-                try:
-                    data = json.loads(line)
-                    result_text = data.get("result", "")
-                    if result_text:
-                        _log_cli(f"[{tool}] OK: {len(result_text)} chars, {len(result_text.split())} words")
-                        return result_text
-                except json.JSONDecodeError:
-                    continue
-
-        if stdout:
-            _log_cli(f"[{tool}] No JSON result field -- raw ({len(stdout)} chars)")
-            return stdout
-        _log_cli(f"[{tool}] empty response")
-        return None
-    except FileNotFoundError:
-        _log_cli(f"[{tool}] not installed")
-        return None
-    except subprocess.TimeoutExpired:
-        _log_cli(f"[{tool}] TIMEOUT after {timeout}s")
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return None
-    except Exception as e:
-        _log_cli(f"[{tool}] error: {e}")
-        return None
-
-
 def claude_run(prompt, timeout=120, ollama_prompt=None, min_words=0):
-    """Waterfall: trexocli → claude → codex → ollama. First success wins.
-    min_words: skip result if word count is below this threshold."""
-    global _last_ai_source, _active_cli
-    for tool in CLI_TOOLS:
-        result = _try_cli(tool, prompt, timeout)
-        if result:
-            if min_words and len(result.split()) < min_words:
-                print(f"[{tool}] too short ({len(result.split())} words, need {min_words}) — trying next")
-                continue
-            _active_cli = tool
-            _last_ai_source = tool.title()
-            return result
-    print(f"[AI] All CLI tools failed — using Ollama fallback")
-    _active_cli = None
-    _last_ai_source = "Ollama (gemma4)"
+    global _last_ai_source
+    _last_ai_source = "Ollama"
     return ollama_run(ollama_prompt or prompt, timeout=max(timeout, 180))
 
 CATEGORY_TO_MOOD = {
@@ -1746,9 +1637,12 @@ def normalize_story(s):
         else:
             ending_part = _rnd.choice(_open_endings)
 
-        # Build CTA if missing
+        # Ensure CTA always includes subscribe
+        has_subscribe = any('subscribe' in c.lower() for c in cta_parts)
         if not cta_parts:
-            cta_parts = ["Subscribe for more stories like this. Follow for daily stories."]
+            cta_parts = ["What would you have done? Drop it in the comments. Subscribe for more stories like this."]
+        elif not has_subscribe:
+            cta_parts.append("Subscribe for more stories like this")
 
         # Rebuild: Story → CTA → Loop cliffhanger
         script = ". ".join(story_parts).rstrip(". ") + ". "
@@ -4939,7 +4833,6 @@ def main():
     init_users()
     flush_old()
     load_url_history()
-    _detect_cli()
     try:
         _resume_pending_jobs()
     except Exception as _rj_err:
@@ -5022,7 +4915,7 @@ def main():
         print("[WARN] Could not set commands - continuing anyway")
     import sys; sys.stdout.flush(); sys.stderr.flush()
 
-    ai_label = ", ".join(t for t in CLI_TOOLS if shutil.which(t)) or "Ollama"
+    ai_label = "Ollama"
     lock_label = f"Lock: {_lock_system_name or '?'}" if _lock_system_name else "Lock: disabled"
     sync_label = "Sync: ON" if os.path.exists(GDRIVE_TOKEN_FILE) else "Sync: OFF"
     for _retry in range(3):
