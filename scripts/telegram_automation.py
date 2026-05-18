@@ -7,6 +7,17 @@ import urllib.request, urllib.error
 
 
 PROJECT = os.environ.get("NOVA_PROJECT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_ENV = {}
+_env_path = os.path.join(PROJECT, "assets", "channel", ".env")
+if os.path.exists(_env_path):
+    with open(_env_path, encoding="utf-8") as _ef:
+        for _line in _ef:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                _ENV[_k.strip()] = _v.strip()
+
 ASSETS = f"{PROJECT}/assets"
 CLIPS_DIR = f"{ASSETS}/clips_manual"
 DEFAULT_CLIPS_DIR = f"{ASSETS}/clips_default"
@@ -39,6 +50,7 @@ USERS_FILE = f"{DATA_DIR}/allowed_users.json"
 NOTIFY_FILE = f"{DATA_DIR}/slot_notifications.json"
 JOBS_FILE = f"{DATA_DIR}/pending_jobs.json"
 ELEVENLABS_CONFIG = f"{DATA_DIR}/elevenlabs_config.json"
+GDRIVE_TOKEN_FILE = f"{DATA_DIR}/gdrive_token.json"
 
 # YT Shorts max 3 min, optimal 35-60s for stories
 MAX_DURATION = 180
@@ -231,6 +243,289 @@ class StopWatcher:
 
 def is_stopped():
     return _stop_flag
+
+# ============ INSTANCE LOCK + DATA SYNC ============
+
+_instance_lock_violated = False
+_lock_system_name = None
+_lock_local_ips = set()
+_gdrive_auth_pending = False
+_gdrive_auth_flow = None
+_last_data_hashes = {}
+_drive_folder_id = None
+
+def _load_lock_config():
+    doc_url = _ENV.get("lock_doc", "")
+    doc_id = ""
+    if "/d/" in doc_url:
+        doc_id = doc_url.split("/d/")[1].split("/")[0]
+    interval = int(_ENV.get("lock_check_interval", "5"))
+    systems = {}
+    for k, v in _ENV.items():
+        if k.startswith("system_"):
+            name = k[7:]
+            systems[name] = [ip.strip() for ip in v.split(",") if ip.strip()]
+    return {"doc_id": doc_id, "systems": systems, "check_interval": interval}
+
+def _detect_system_name():
+    import socket
+    cfg = _load_lock_config()
+    systems = cfg.get("systems", {})
+    local_ips = set()
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                local_ips.add(ip)
+    except:
+        pass
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ips.add(s.getsockname()[0])
+        s.close()
+    except:
+        pass
+    for sys_name, ips in systems.items():
+        if local_ips & set(ips):
+            return sys_name, local_ips
+    return "UNKNOWN", local_ips
+
+_last_doc_error = None
+def _read_doc_status():
+    global _last_doc_error
+    cfg = _load_lock_config()
+    doc_id = cfg.get("doc_id", "")
+    if not doc_id:
+        return {}
+    url = f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        resp = urllib.request.urlopen(req, timeout=10)
+        text = resp.read().decode("utf-8-sig", errors="ignore").strip()
+        status = {}
+        for line in text.replace("\r", "").split("\n"):
+            line = line.strip()
+            if "=" in line:
+                parts = line.split("=", 1)
+                name = parts[0].strip().upper()
+                val = parts[1].strip().upper()
+                status[name] = val
+            elif ":" in line:
+                parts = line.split(":", 1)
+                name = parts[0].strip().upper()
+                val = parts[1].strip().upper()
+                status[name] = val
+        if _last_doc_error:
+            print(f"[LOCK] Doc read recovered")
+            _last_doc_error = None
+        return status
+    except Exception as e:
+        err_key = str(e)
+        if err_key != _last_doc_error:
+            print(f"[LOCK] Doc read failed: {e}")
+            _last_doc_error = err_key
+        return None
+
+def _check_instance_lock():
+    global _lock_system_name, _lock_local_ips
+    _lock_system_name, _lock_local_ips = _detect_system_name()
+    print(f"[LOCK] Detected: {_lock_system_name} ({', '.join(_lock_local_ips)})")
+    status = _read_doc_status()
+    if status is None:
+        print("[LOCK] Could not read doc — starting without lock")
+        return True
+    if not status:
+        print("[LOCK] Doc empty — starting without lock")
+        return True
+    my_status = status.get(_lock_system_name, "").upper()
+    if my_status == "ON":
+        print(f"[LOCK] Doc says {_lock_system_name}: ON — starting")
+        return True
+    elif my_status == "OFF":
+        print(f"[LOCK] Doc says {_lock_system_name}: OFF — NOT starting")
+        try:
+            _send_admin_msg(f"<b>Instance Lock: NOT starting</b>\n{_lock_system_name} is OFF in control doc.")
+        except:
+            pass
+        return False
+    else:
+        print(f"[LOCK] No entry for {_lock_system_name} in doc — starting without lock")
+        return True
+
+def _lock_watcher_loop():
+    global _instance_lock_violated
+    cfg = _load_lock_config()
+    interval = cfg.get("check_interval", 5)
+    fail_count = 0
+    while True:
+        wait = interval if fail_count < 3 else min(interval * fail_count, 30)
+        time.sleep(wait)
+        try:
+            status = _read_doc_status()
+            if status is None:
+                fail_count += 1
+                continue
+            fail_count = 0
+            my_status = status.get(_lock_system_name, "").upper()
+            if my_status == "OFF":
+                print(f"[LOCK] {_lock_system_name}: OFF detected — shutting down!")
+                _instance_lock_violated = True
+                return
+        except:
+            fail_count += 1
+
+def _get_drive_client():
+    if not os.path.exists(GDRIVE_TOKEN_FILE):
+        return None
+    try:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+        from googleapiclient.discovery import build as g_build
+        td = load_json(GDRIVE_TOKEN_FILE, {})
+        if not td.get("refresh_token"):
+            return None
+        creds = Credentials(
+            token=td.get("token"), refresh_token=td["refresh_token"],
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=td["client_id"], client_secret=td["client_secret"],
+            scopes=td.get("scopes", ["https://www.googleapis.com/auth/drive.file"]))
+        if creds.expired or not creds.valid:
+            creds.refresh(Request())
+            td["token"] = creds.token
+            save_json(GDRIVE_TOKEN_FILE, td)
+        return g_build("drive", "v3", credentials=creds)
+    except Exception as e:
+        print(f"[SYNC] Drive client error: {e}")
+        return None
+
+def _ensure_drive_folder(service):
+    global _drive_folder_id
+    if _drive_folder_id:
+        return _drive_folder_id
+    try:
+        r = service.files().list(
+            q="name='ToldByNova_Data' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            spaces="drive", fields="files(id)").execute()
+        files = r.get("files", [])
+        if files:
+            _drive_folder_id = files[0]["id"]
+        else:
+            meta = {"name": "ToldByNova_Data", "mimeType": "application/vnd.google-apps.folder"}
+            folder = service.files().create(body=meta, fields="id").execute()
+            _drive_folder_id = folder["id"]
+        return _drive_folder_id
+    except Exception as e:
+        print(f"[SYNC] Folder error: {e}")
+        return None
+
+_SYNC_EXCLUDE = {"gdrive_token.json", "bot.log", "bot_stdout.log", "bot_stderr.log", "cli_debug.log"}
+
+def _compute_data_hashes():
+    hashes = {}
+    if not os.path.isdir(DATA_DIR):
+        return hashes
+    for f in os.listdir(DATA_DIR):
+        if not f.endswith(".json") or f in _SYNC_EXCLUDE:
+            continue
+        path = os.path.join(DATA_DIR, f)
+        try:
+            with open(path, "rb") as fh:
+                hashes[f] = hashlib.md5(fh.read()).hexdigest()
+        except:
+            pass
+    return hashes
+
+def _sync_to_drive(force=False):
+    global _last_data_hashes
+    service = _get_drive_client()
+    if not service:
+        return
+    folder_id = _ensure_drive_folder(service)
+    if not folder_id:
+        return
+    current = _compute_data_hashes()
+    if not force:
+        changed = {f for f in current if current[f] != _last_data_hashes.get(f)}
+        deleted = {f for f in _last_data_hashes if f not in current}
+    else:
+        changed = set(current.keys())
+        deleted = set()
+    if not changed and not deleted:
+        return
+    existing = {}
+    try:
+        r = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            spaces="drive", fields="files(id, name)").execute()
+        for f in r.get("files", []):
+            existing[f["name"]] = f["id"]
+    except:
+        pass
+    from googleapiclient.http import MediaFileUpload
+    uploaded = 0
+    for fname in changed:
+        path = os.path.join(DATA_DIR, fname)
+        if not os.path.exists(path):
+            continue
+        try:
+            media = MediaFileUpload(path, mimetype="application/json", resumable=False)
+            if fname in existing:
+                service.files().update(fileId=existing[fname], media_body=media).execute()
+            else:
+                meta = {"name": fname, "parents": [folder_id]}
+                service.files().create(body=meta, media_body=media, fields="id").execute()
+            uploaded += 1
+        except Exception as e:
+            print(f"[SYNC] Upload {fname} failed: {e}")
+    if uploaded:
+        print(f"[SYNC] Uploaded {uploaded} file(s) to Drive")
+    _last_data_hashes = current
+
+def _sync_from_drive():
+    service = _get_drive_client()
+    if not service:
+        print("[SYNC] Drive not authorized — use /auth_drive")
+        return 0
+    folder_id = _ensure_drive_folder(service)
+    if not folder_id:
+        return 0
+    try:
+        r = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            spaces="drive", fields="files(id, name)").execute()
+        files = r.get("files", [])
+    except Exception as e:
+        print(f"[SYNC] List failed: {e}")
+        return 0
+    downloaded = 0
+    os.makedirs(DATA_DIR, exist_ok=True)
+    for f in files:
+        fname = f["name"]
+        if fname in _SYNC_EXCLUDE or not fname.endswith(".json"):
+            continue
+        try:
+            content = service.files().get_media(fileId=f["id"]).execute()
+            path = os.path.join(DATA_DIR, fname)
+            with open(path, "wb") as fh:
+                fh.write(content)
+            downloaded += 1
+        except Exception as e:
+            print(f"[SYNC] Download {fname} failed: {e}")
+    if downloaded:
+        print(f"[SYNC] Downloaded {downloaded} file(s) from Drive")
+    global _last_data_hashes
+    _last_data_hashes = _compute_data_hashes()
+    return downloaded
+
+def _sync_loop():
+    while True:
+        time.sleep(10)
+        try:
+            _sync_to_drive()
+        except Exception as e:
+            print(f"[SYNC] Sync error: {e}")
 
 
 def run_with_stop(func, *args, **kwargs):
@@ -3215,6 +3510,29 @@ def handle_message(msg):
     text = msg.get("text", "").strip()
     text_lower = text.lower()
 
+    # ---- DRIVE AUTH CODE INTERCEPTION ----
+    global _gdrive_auth_pending, _gdrive_auth_flow
+    if _gdrive_auth_pending and is_admin(user_id) and text and not text.startswith("/"):
+        try:
+            _gdrive_auth_flow.fetch_token(code=text.strip())
+            creds = _gdrive_auth_flow.credentials
+            save_json(GDRIVE_TOKEN_FILE, {
+                "token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "token_uri": creds.token_uri,
+                "client_id": creds.client_id,
+                "client_secret": creds.client_secret,
+                "scopes": list(creds.scopes or [])
+            })
+            _gdrive_auth_pending = False
+            _gdrive_auth_flow = None
+            send("Google Drive authorized!\nData sync is now active.\nRestart bot to enable sync.")
+        except Exception as e:
+            _gdrive_auth_pending = False
+            _gdrive_auth_flow = None
+            send(f"Auth failed: {e}\nTry /auth_drive again.")
+        return
+
     # ---- COMMANDS ----
 
     if text_lower in ["/start", "/menu", "/help"]:
@@ -3681,6 +3999,76 @@ def handle_message(msg):
             send(f"Voice engine: ElevenLabs\nKeys: {n} (~{n*10000:,} chars/month)\nFallback: Edge TTS")
         else:
             send("Voice engine: Edge TTS (en-US-EmmaNeural)")
+        return
+
+    # ---- INSTANCE LOCK + SYNC COMMANDS ----
+
+    if text_lower in ["/auth_drive", "/authdrive"]:
+        if not is_admin(user_id):
+            send("Admin only.")
+            return
+        try:
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            client_file = f"{DATA_DIR}/yt_client_secret_1.json"
+            if not os.path.exists(client_file):
+                send("Missing yt_client_secret_1.json in data/ folder.")
+                return
+            flow = InstalledAppFlow.from_client_secrets_file(
+                client_file,
+                scopes=["https://www.googleapis.com/auth/drive.file"],
+                redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+            )
+            auth_url, _ = flow.authorization_url(prompt="consent")
+            _gdrive_auth_flow = flow
+            _gdrive_auth_pending = True
+            send(
+                f"<b>Google Drive Authorization</b>\n\n"
+                f"1. Open this URL:\n{auth_url}\n\n"
+                f"2. Sign in and allow access\n"
+                f"3. Copy the code and send it here"
+            )
+        except Exception as e:
+            send(f"Auth setup failed: {e}")
+        return
+
+    if text_lower in ["/bot_lock", "/botlock", "/lock"]:
+        if not is_admin(user_id):
+            send("Admin only.")
+            return
+        sys_name, local_ips = _detect_system_name()
+        doc_status = _read_doc_status()
+        drive_ok = os.path.exists(GDRIVE_TOKEN_FILE)
+        lines = ["<b>Instance Lock + Sync Status</b>\n"]
+        lines.append(f"This system: <b>{sys_name}</b>")
+        lines.append(f"IPs: {', '.join(local_ips)}")
+        if doc_status is None:
+            lines.append(f"\nDoc: Could not read")
+        elif doc_status:
+            lines.append(f"\nDoc status:")
+            for k, v in doc_status.items():
+                icon = "ON" if v == "ON" else "OFF"
+                lines.append(f"  {k}: {icon}")
+            my = doc_status.get(sys_name, "?")
+            lines.append(f"\nThis system: <b>{my}</b>")
+        else:
+            lines.append(f"\nDoc: Empty")
+        lines.append(f"\nDrive sync: {'Active' if drive_ok else 'Not authorized (/auth_drive)'}")
+        send("\n".join(lines))
+        return
+
+    if text_lower in ["/sync_now", "/syncnow", "/sync"]:
+        if not is_admin(user_id):
+            send("Admin only.")
+            return
+        if not os.path.exists(GDRIVE_TOKEN_FILE):
+            send("Drive not authorized.\nUse /auth_drive first.")
+            return
+        send("Syncing to Drive...")
+        try:
+            _sync_to_drive(force=True)
+            send("Sync complete!")
+        except Exception as e:
+            send(f"Sync failed: {e}")
         return
 
     if text_lower in ["/clear-clip", "/clearclip", "/clear-clips", "/clear_clip"]:
@@ -4557,6 +4945,28 @@ def main():
     except Exception as _rj_err:
         print(f"[WARN] Resume jobs failed: {_rj_err}")
 
+    # ---- Instance Lock + Data Sync ----
+    try:
+        _sync_from_drive()
+    except Exception as _sync_err:
+        print(f"[WARN] Drive sync failed: {_sync_err}")
+    try:
+        if not _check_instance_lock():
+            raise SystemExit
+    except SystemExit:
+        raise
+    except Exception as _lock_err:
+        print(f"[WARN] Instance lock failed: {_lock_err} — starting without lock")
+    threading.Thread(target=_lock_watcher_loop, daemon=True).start()
+    print("[LOCK] Watcher thread started (5s interval)")
+    if os.path.exists(GDRIVE_TOKEN_FILE):
+        try:
+            _sync_to_drive(force=True)
+        except Exception as _isync_err:
+            print(f"[SYNC] Initial upload failed: {_isync_err}")
+        threading.Thread(target=_sync_loop, daemon=True).start()
+        print("[SYNC] Sync thread started (10s interval)")
+
     # Clear all old commands (any scope), then set new ones
     try:
         api_call("deleteMyCommands", {}, timeout=10)
@@ -4596,6 +5006,9 @@ def main():
         {"command": "voice_keys", "description": "View voice API keys"},
         {"command": "voice_api_status", "description": "Live API credit status"},
         {"command": "voice", "description": "Switch voice (elevenlabs/edge)"},
+        {"command": "auth_drive", "description": "Authorize Google Drive (one-time)"},
+        {"command": "bot_lock", "description": "Instance lock & sync status"},
+        {"command": "sync_now", "description": "Force sync data to Drive"},
         {"command": "start", "description": "Commands menu"},
     ])
     try:
@@ -4610,6 +5023,8 @@ def main():
     import sys; sys.stdout.flush(); sys.stderr.flush()
 
     ai_label = ", ".join(t for t in CLI_TOOLS if shutil.which(t)) or "Ollama"
+    lock_label = f"Lock: {_lock_system_name or '?'}" if _lock_system_name else "Lock: disabled"
+    sync_label = "Sync: ON" if os.path.exists(GDRIVE_TOKEN_FILE) else "Sync: OFF"
     for _retry in range(3):
         try:
             if bot.state != "IDLE":
@@ -4617,6 +5032,7 @@ def main():
                     f"<b>Told By Nova — Started!</b>\n"
                     f"State: {bot.state}\n"
                     f"AI: {ai_label}\n"
+                    f"{lock_label} | {sync_label}\n"
                     f"Clips: {count_clips()}\n"
                     f"Stories used: {len(load_history())}\n\n"
                     f"<b>Pending work detected!</b>",
@@ -4627,6 +5043,7 @@ def main():
                     f"<b>Told By Nova — Started!</b>\n"
                     f"State: {bot.state}\n"
                     f"AI: {ai_label}\n"
+                    f"{lock_label} | {sync_label}\n"
                     f"Clips: {count_clips()}\n"
                     f"Stories used: {len(load_history())}",
                     reply_markup=btn(("Auto", "/auto"), ("Story", "/story"), ("Menu", "/start"))
@@ -4638,6 +5055,13 @@ def main():
 
     conflict_retries = 0
     while True:
+        if _instance_lock_violated:
+            _send_admin_msg(f"<b>Shutting down from {_lock_system_name}</b>\nTurned OFF via control doc.")
+            try:
+                _sync_to_drive(force=True)
+            except:
+                pass
+            raise SystemExit
         try:
             updates = api_call("getUpdates", {"offset": last_update + 1, "timeout": 5}, timeout=10)
             conflict_retries = 0
@@ -4712,6 +5136,10 @@ if __name__ == "__main__":
             main()
         except KeyboardInterrupt:
             print("\n[BOT] Stopped by user (Ctrl+C)")
+            try:
+                _sync_to_drive(force=True)
+            except:
+                pass
             break
         except SystemExit:
             break

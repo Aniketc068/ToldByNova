@@ -3,6 +3,8 @@ assets/channel/.env
 credentials.json
 token.json
 data/elevenlabs_config.json
+data/instance_lock.json
+data/gdrive_token.json
 data/allowed_users.json
 data/bot_state.json
 data/claude_session.json
