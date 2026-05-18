@@ -1,8 +1,18 @@
 # Told By Nova - YouTube Shorts Automation Bot
 
+**100% Free & Open Source** | [MIT License](LICENSE)
+
 A fully automated YouTube Shorts factory controlled entirely from Telegram. AI generates viral stories, human-quality voice narrates them, FFmpeg builds pro-quality videos with effects, and YouTube uploads are scheduled at peak USA viewing hours - all hands-free.
 
 **1,060+ subscribers and 18,500+ views in 6 days** - every video automated from story to upload.
+
+### Top Performing Videos (Bot-Generated)
+
+| # | Video | Views |
+|---|-------|-------|
+| 1 | [Karen's Midnight Raid Backfires](https://youtube.com/shorts/ikziz7pWbac) | 1,472 |
+| 2 | [He Sued Red Bull Because It Didn't Give Him Wings](https://youtube.com/shorts/DzBWc4Ve3X4) | 1,326 |
+| 3 | [She Found His Secret Phone and Destroyed His Life](https://youtube.com/shorts/okfESIzlBZU) | 1,237 |
 
 ---
 
@@ -282,7 +292,9 @@ The bot needs short video clips as visual backgrounds for narration.
 
 #### Where to Download
 
-All clips **must be 100% copyright-free**. Never take clips from YouTube.
+All clips **must be 100% copyright-free**. Never take clips from YouTube - it will cause copyright strikes.
+
+**Free Stock Video Sites:**
 
 | Source | URL | License |
 |--------|-----|---------|
@@ -290,7 +302,19 @@ All clips **must be 100% copyright-free**. Never take clips from YouTube.
 | **Pixabay** | [pixabay.com/videos](https://pixabay.com/videos/) | Pixabay License (free) |
 | **Coverr** | [coverr.co](https://coverr.co/) | Free to use |
 
-**What to search for:** "satisfying" videos - soap cutting, slime mixing, calligraphy, cooking, nature close-ups, cleaning, organizing. These work best as story narration backgrounds.
+#### Reference Apps for Satisfying Video Clips
+
+These apps have massive libraries of satisfying/ASMR/oddly satisfying clips. Download clips from these platforms and use them as backgrounds for your narration videos.
+
+| App | Platform | Why Use It | Notes |
+|-----|----------|-----------|-------|
+| **RedNote (Xiaohongshu)** | iOS / Android | #1 source for satisfying clips - soap cutting, slime, sand, calligraphy, cleaning. Huge library, high quality, vertical format ready. Most creators allow reuse. | Best source overall. Search: "satisfying", "ASMR", "oddly satisfying" |
+| **TikTok** | iOS / Android | Massive satisfying video library. Use VPN if TikTok is banned in your country. | Download via save button or third-party tools. Bot auto-trims last 6s to remove watermarks |
+| **Kuaishou** | iOS / Android | Chinese short video app with tons of satisfying/craft/cooking content. Less known but excellent quality clips. | Search in Chinese for best results: "解压" (decompression/satisfying) |
+
+**Important:** The bot has built-in auto-trim that removes the last 6 seconds from clips (to cut watermarks from RedNote/TikTok). Enable with `/trim_on` (enabled by default).
+
+**What to search for:** "satisfying" videos - soap cutting, slime mixing, calligraphy, cooking, nature close-ups, cleaning, organizing, restocking, pottery, sand kinetic. These work best as story narration backgrounds.
 
 **Requirements:** MP4/WebM/MOV, at least 5 seconds, any resolution (auto-scaled to 1080x1920). Place 5-10 clips in `assets/clips_default/`.
 
@@ -617,16 +641,102 @@ ToldByNova/
 
 ## System Requirements
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| CPU | Any dual-core | Quad-core+ |
-| RAM | 4 GB | 8 GB+ |
-| Storage | 5 GB free | 10 GB+ free |
-| GPU | Not required | NVIDIA (speeds up FFmpeg) |
-| Internet | Required | Stable connection |
-| OS | Windows 10/11, Linux, macOS | Windows 11 |
+This bot runs on extremely basic hardware. All heavy processing (AI, voice) happens on cloud APIs. Your machine only runs Python + FFmpeg.
 
-The bot runs on very basic hardware. All heavy AI processing (story generation, voice) happens on cloud APIs. FFmpeg video building is the only local compute - takes 30-60 seconds per Short on CPU.
+### Minimum (Will Work)
+
+| Component | Spec |
+|-----------|------|
+| CPU | Any dual-core (even Intel i3 6th gen / Celeron) |
+| RAM | 4 GB |
+| Storage | 3 GB free |
+| GPU | Not required (integrated graphics is fine) |
+| Internet | Any stable connection |
+| OS | Windows 10/11, Linux, macOS |
+| Display | Any resolution (bot runs headless) |
+
+### Tested & Confirmed Working On
+
+| Component | Spec |
+|-----------|------|
+| CPU | Intel i5-7400 (4C/4T, 2017) |
+| RAM | 16 GB DDR4 |
+| GPU | Intel HD 630 (integrated, no dedicated GPU) |
+| Storage | 256 GB SSD |
+| OS | Windows 11 |
+
+This exact system runs the bot 24/7 producing 4 videos/day with zero issues. FFmpeg video build takes ~30-60 seconds on CPU. If you have an NVIDIA GPU, FFmpeg uses it automatically for faster encoding.
+
+**Bottom line:** If your PC can run Chrome, it can run this bot.
+
+---
+
+## All Telegram Commands (Detailed)
+
+### Content Creation
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/auto` | Generates an AI story using viral hook-first structure. AI searches DuckDuckGo for trending Reddit/viral stories, then creates a narration script with hook, escalation, twist, and loop cliffhanger. | When you want the bot to create a story from scratch |
+| `/story <text>` | Submit your own story or idea. AI refines it into the optimal Shorts format with hooks, CTA, and loop ending. | When you have a specific story in mind |
+| `/1` or `/2` | Pick one of the generated story options. | After `/auto` generates options |
+| `/ok` | Approve the story (triggers voice + subtitle generation) or approve video for upload. Multi-purpose confirm button. | After reviewing story or preview |
+| `/more` | Reject current options and generate fresh story options. | When none of the stories are good enough |
+| `/redo` | Skip current story or request a video rebuild with new random effects. | When you want to start over |
+
+### Video Building
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/clips` | Enter clip collection mode. Send video files as documents or paste URLs. Bot shows a live progress counter. | After approving story, before building |
+| `/done` | Finish collecting clips and move to build. | When you have enough clips |
+| `/build` | Build the video with FFmpeg - assembles clips, narration, subtitles, BGM, subscribe overlay, vignette, and all effects. Multi-threaded (3-4 workers). | After story is approved (with or without custom clips) |
+| `/rebuild` | Rebuild with different random effects - new subtitle colors, new clip order, new speed variations. Every rebuild is unique. | When preview doesn't look right |
+| `/duration <N>` | Set fixed video duration in seconds (15-180). Use `/duration auto` for the optimal 33-38s range. | Before generating a story |
+| `/trim_on` | Enable auto-trim: removes last 6 seconds from every clip (cuts RedNote/TikTok watermarks). Enabled by default. | When using clips from social media apps |
+| `/trim_off` | Disable auto-trim. | When using clips without watermarks |
+| `/clear_clip` | Delete all user-uploaded clips. | To start fresh with clips |
+
+### YouTube Upload & Management
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/upload` | Upload video to YouTube at the next available slot. Video goes as private and auto-publishes at scheduled time. Triggers all PRO features automatically. | After approving the preview |
+| `/schedule` | View all 4 daily upload slots with times in IST and EDT. Shows which slots are used/available. | To plan your upload timing |
+| `/stats` | Channel analytics - subscriber count, total views, video count, monetization progress (toward 1K subs + 10M Shorts views). | To check channel growth |
+| `/confirm` | Cleanup after successful upload - deletes temp files, voice files, work directories, resets for next video. | After upload is confirmed |
+
+### Bot Control
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/start` or `/menu` | Show main menu with all available action buttons. | First time or anytime |
+| `/status` | Current bot state - shows pipeline stage, clips count, stories used, voice engine, AI tool. | To check what's happening |
+| `/resume` | Continue an interrupted pipeline from where it stopped (crash recovery). State is persistent. | After bot restart during a video |
+| `/stop` | Gracefully halt current long operation (video build, upload). Stops after current segment, preserves state. | When you need to abort |
+| `/reset` | Full reset - delete all temp files, reset state to IDLE, start fresh. | When something goes wrong |
+| `/history` | View last 20 stories used (title, date, mood). | To check what was already used |
+
+### Admin Commands
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/add_user <telegram_id>` | Grant bot access to another user by their Telegram ID. | To let someone else use the bot |
+| `/remove_user <telegram_id>` | Revoke access from a user. | To remove someone's access |
+| `/view_users` | List all authorized users with names and IDs. | To see who has access |
+
+### ElevenLabs Voice Management
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/add_voice_key <key>` | Add an ElevenLabs API key. Auto-validates by hitting the API, shows account info, activates ElevenLabs engine. | When setting up voice accounts |
+| `/voice_keys` | List all saved keys with index numbers and labels. | To see your keys |
+| `/remove_voice_key <N>` | Remove a key by its index number (shown in `/voice_keys`). | When a key expires or you want to remove it |
+| `/voice_api_status` | **Live real-time check** - hits every key's API, shows characters used/remaining, renewal date, progress bar, and estimated videos remaining per key. | To monitor quota usage |
+| `/voice elevenlabs` | Switch voice engine to ElevenLabs (human-quality). | To activate ElevenLabs |
+| `/voice edge` | Switch voice engine to Edge TTS (robotic but free and unlimited). | To switch back to free voice |
+| `/voice` | Show current voice engine and settings. | To check active voice |
+| `/voice_id <id>` | Change the ElevenLabs voice ID (get from elevenlabs.io voice settings). | To use a different voice |
 
 ---
 
@@ -645,9 +755,41 @@ The bot runs on very basic hardware. All heavy AI processing (story generation, 
 | Duplicate bot messages | Kill all Python processes and restart bot once |
 | Video too long | Use `/duration 35` or `/duration auto` for 33-38s |
 | Story not USA-focused | AI prompt is pre-configured for USA. Custom stories via `/story` should be USA-relatable |
+| Bot starts twice on reboot | Check Task Scheduler for duplicate tasks. Keep only one. |
+
+---
+
+## Contributing
+
+Contributors are most welcome! If you want to help take this project to the next level, feel free to:
+
+- Fork the repo and submit pull requests
+- Report bugs or suggest features via Issues
+- Improve the video pipeline, add new effects
+- Add new AI providers or voice engines
+- Optimize FFmpeg encoding or add new subtitle styles
+- Improve SEO generation or algorithm optimization
+
+All contributions are appreciated. Check the open issues for things to work on, or propose your own improvements.
+
+---
+
+## Support the Project
+
+This software is **100% free and open source** under the [MIT License](LICENSE). You can use it, modify it, distribute it - no restrictions.
+
+If this bot helps you get views and grow your channel, please consider subscribing to the original channel as a small thank you:
+
+**[Subscribe to Told By Nova on YouTube](https://www.youtube.com/@ToldByNova?sub_confirmation=1)**
+
+It costs nothing and means a lot. Thank you!
 
 ---
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License - 100% free and open source.
+
+You are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of this software. No restrictions, no royalties, no fees.
+
+See [LICENSE](LICENSE) for full details.
