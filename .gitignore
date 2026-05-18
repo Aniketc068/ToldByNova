@@ -1,0 +1,73 @@
+# Secrets & credentials
+assets/channel/.env
+credentials.json
+token.json
+data/elevenlabs_config.json
+data/allowed_users.json
+data/bot_state.json
+data/claude_session.json
+data/pending_stories.json
+data/pending_jobs.json
+data/story_history.json
+data/upload_schedule.json
+data/slot_notifications.json
+data/cli_debug.log
+data/*.py
+data/bot.log
+data/yt_*.json
+data/ytdlp_oauth.json
+data/competitor_channels.json
+data/video_analytics.json
+data/*.mp4
+
+# Logs
+logs/
+bot_output.log
+bot_stderr.log
+bot_stdout.log
+bot_out.log
+bot_err.log
+
+# Output videos
+output/
+
+# User clips (uploaded by users)
+assets/clips_manual/*.mp4
+assets/clips_manual/*.webm
+assets/clips_manual/*.mov
+assets/clips_manual/.hash_history.json
+assets/clips_manual/.url_history.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Windows / startup scripts (contain env vars)
+nova_bot_task.xml
+start_hidden.vbs
+run_bot.bat
+run_bot.py
+start_bot.bat
+start_bot.ps1
+
+# Data files (user-specific)
+data/rednote_qr.png
+assets/clips_default/clip06.mp4
+
+# Test/experimental files
+assets/sample_viewlong*
+assets/view_long.mp4
+assets/test_sample/
+assets/work_sub_frame.png
+assets/work_vl_frame.png
+scripts/test_*.py
+scripts/compare_*.py
+scripts/clone_catalina.py
+scripts/sample_long_video.py
+scripts/thumb_samples.py
+scripts/experimental/
+scripts/telegram_automation_backup_*.py
+models/
+docs/
+tools/

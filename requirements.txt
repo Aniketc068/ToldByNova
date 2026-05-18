@@ -1,0 +1,10 @@
+edge-tts
+google-auth
+google-auth-oauthlib
+google-api-python-client
+httpx
+Pillow
+opencv-python-headless
+rembg[cpu]
+numpy
+ddgs
