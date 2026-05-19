@@ -70,16 +70,22 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 # ============ STATE MANAGEMENT ============
 
+_data_io_lock = threading.RLock()
+
 def load_json(path, default=None):
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return default if default is not None else {}
+    with _data_io_lock:
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return default if default is not None else {}
 
 def save_json(path, data):
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with _data_io_lock:
+        tmp = path + ".tmp"
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, path)
 
 def _sanitize_saved_seo(seo):
     """Auto-fix pre-saved SEO data on load — strips #, caps tags, cleans title."""
@@ -418,22 +424,25 @@ def _ensure_drive_folder(service):
 _SYNC_EXCLUDE = {"gdrive_token.json", "bot.log", "bot_stdout.log", "bot_stderr.log", "cli_debug.log"}
 
 def _compute_data_hashes():
-    hashes = {}
-    if not os.path.isdir(DATA_DIR):
+    with _data_io_lock:
+        hashes = {}
+        if not os.path.isdir(DATA_DIR):
+            return hashes
+        for f in os.listdir(DATA_DIR):
+            if not f.endswith(".json") or f in _SYNC_EXCLUDE:
+                continue
+            path = os.path.join(DATA_DIR, f)
+            try:
+                with open(path, "rb") as fh:
+                    hashes[f] = hashlib.md5(fh.read()).hexdigest()
+            except:
+                pass
         return hashes
-    for f in os.listdir(DATA_DIR):
-        if not f.endswith(".json") or f in _SYNC_EXCLUDE:
-            continue
-        path = os.path.join(DATA_DIR, f)
-        try:
-            with open(path, "rb") as fh:
-                hashes[f] = hashlib.md5(fh.read()).hexdigest()
-        except:
-            pass
-    return hashes
 
 def _sync_to_drive(force=False):
     global _last_data_hashes
+    if _instance_lock_violated:
+        return
     service = _get_drive_client()
     if not service:
         return
@@ -489,7 +498,7 @@ def _sync_from_drive():
     try:
         r = service.files().list(
             q=f"'{folder_id}' in parents and trashed=false",
-            spaces="drive", fields="files(id, name)").execute()
+            spaces="drive", fields="files(id, name, modifiedTime)").execute()
         files = r.get("files", [])
     except Exception as e:
         print(f"[SYNC] List failed: {e}")
@@ -500,11 +509,22 @@ def _sync_from_drive():
         fname = f["name"]
         if fname in _SYNC_EXCLUDE or not fname.endswith(".json"):
             continue
+        path = os.path.join(DATA_DIR, fname)
+        if os.path.exists(path):
+            try:
+                import datetime as _dt
+                local_mtime = os.path.getmtime(path)
+                drive_time = _dt.datetime.fromisoformat(
+                    f.get("modifiedTime", "").replace("Z", "+00:00")).timestamp()
+                if local_mtime > drive_time:
+                    continue
+            except:
+                pass
         try:
             content = service.files().get_media(fileId=f["id"]).execute()
-            path = os.path.join(DATA_DIR, fname)
-            with open(path, "wb") as fh:
-                fh.write(content)
+            with _data_io_lock:
+                with open(path, "wb") as fh:
+                    fh.write(content)
             downloaded += 1
         except Exception as e:
             print(f"[SYNC] Download {fname} failed: {e}")
@@ -2624,6 +2644,30 @@ def _remove_job(job_id):
     save_json(JOBS_FILE, jobs)
     print(f"[JOBS] Removed: {job_id}")
 
+def _claim_job(job_id):
+    """Claim a job for this system. Returns True if claimed, False if already claimed by another."""
+    import datetime as _dt
+    jobs = load_json(JOBS_FILE, [])
+    for job in jobs:
+        if job.get("id") == job_id:
+            claimed = job.get("claimed_by")
+            if claimed and claimed != _lock_system_name:
+                claim_time = job.get("claimed_at", "")
+                try:
+                    ct = _dt.datetime.fromisoformat(claim_time.replace("Z", "+00:00"))
+                    age = (_dt.datetime.now(_dt.timezone.utc) - ct).total_seconds()
+                    if age < 3600:
+                        return False
+                except:
+                    return False
+            job["claimed_by"] = _lock_system_name
+            job["claimed_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+            break
+    else:
+        return False
+    save_json(JOBS_FILE, jobs)
+    return True
+
 
 def _wait_for_video_public(video_id, publish_at=None, max_wait_hours=48):
     """Wait until a scheduled video becomes public. Returns True when public."""
@@ -2996,6 +3040,8 @@ def _periodic_job_check():
             jid = job.get("id")
             if jid in _active_comment_threads:
                 continue
+            if not _claim_job(jid):
+                continue
             is_public = _check_video_is_public(vid)
             if is_public:
                 print(f"[JOBS-CHECK] {vid} is public — posting comment now")
@@ -3018,6 +3064,9 @@ def _resume_pending_jobs():
         jtype = job.get("type")
         vid = job.get("video_id")
         jid = job.get("id")
+        if not _claim_job(jid):
+            print(f"[JOBS] Skipping {jid} — claimed by another system")
+            continue
         if jtype == "post_comment":
             is_public = _check_video_is_public(vid)
             if is_public:
@@ -4643,16 +4692,13 @@ def main():
     init_users()
     flush_old()
     load_url_history()
-    try:
-        _resume_pending_jobs()
-    except Exception as _rj_err:
-        print(f"[WARN] Resume jobs failed: {_rj_err}")
 
     # ---- Instance Lock + Data Sync ----
     try:
         _sync_from_drive()
     except Exception as _sync_err:
         print(f"[WARN] Drive sync failed: {_sync_err}")
+    bot.load()
     try:
         if not _check_instance_lock():
             raise SystemExit
@@ -4660,6 +4706,10 @@ def main():
         raise
     except Exception as _lock_err:
         print(f"[WARN] Instance lock failed: {_lock_err} — starting without lock")
+    try:
+        _resume_pending_jobs()
+    except Exception as _rj_err:
+        print(f"[WARN] Resume jobs failed: {_rj_err}")
     threading.Thread(target=_lock_watcher_loop, daemon=True).start()
     print("[LOCK] Watcher thread started (5s interval)")
     if os.path.exists(GDRIVE_TOKEN_FILE):
