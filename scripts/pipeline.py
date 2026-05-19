@@ -403,6 +403,8 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     base_vf_parts.append(f"ass='{ass_basename}'")
     main_vf = ",".join(base_vf_parts)
 
+    sub_dur = dur(SUBSCRIBE_VID) if has_subscribe else 0
+
     def _build_overlay_cmd(encoder_args):
         inputs = ['-i', bg]
         fc_parts = [f"[0:v]{main_vf}[main]"]
@@ -411,16 +413,17 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
 
         if has_subscribe:
             for si, st in enumerate(sub_times):
-                inputs.extend(['-itsoffset', str(st), '-i', SUBSCRIBE_VID])
+                inputs.extend(['-i', SUBSCRIBE_VID])
                 sub_label = f"sub{si}"
                 after_label = f"after_sub{si}"
+                et = st + sub_dur
                 fc_parts.append(
                     f"[{overlay_idx}:v]chromakey=0x00af3f:0.12:0.02,"
                     f"{sub_scale}[{sub_label}]"
                 )
                 y_pos = "550" if landscape else "(H/2)"
                 fc_parts.append(
-                    f"[{prev_label}][{sub_label}]overlay=(W-w)/2:{y_pos}:eof_action=pass[{after_label}]"
+                    f"[{prev_label}][{sub_label}]overlay=(W-w)/2:{y_pos}:enable='between(t,{st},{et})':eof_action=pass[{after_label}]"
                 )
                 prev_label = after_label
                 overlay_idx += 1
@@ -456,6 +459,8 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     # CPU fallback
     if r.returncode != 0:
         print("GPU failed, trying CPU...")
+        try: os.remove(output_path)
+        except: pass
         if has_overlays:
             r = run(_build_overlay_cmd(cpu_enc), 600)
         else:
