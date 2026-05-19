@@ -413,7 +413,7 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
 
         if has_subscribe:
             for si, st in enumerate(sub_times):
-                inputs.extend(['-i', SUBSCRIBE_VID])
+                inputs.extend(['-itsoffset', str(st), '-stream_loop', '-1', '-i', SUBSCRIBE_VID])
                 sub_label = f"sub{si}"
                 after_label = f"after_sub{si}"
                 et = st + sub_dur

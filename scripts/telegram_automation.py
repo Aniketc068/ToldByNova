@@ -2198,7 +2198,7 @@ Channel: Told By Nova (female narrator, real viral true stories, USA audience)
 # ============ VOICE GENERATION ============
 
 def generate_voice(script, vid_id, mood=None):
-    """Generate voice + SRT (ElevenLabs with mood-based voice, fallback Edge TTS)"""
+    """Generate voice + SRT via Edge TTS"""
     sys.path.insert(0, SCRIPTS)
     import voice_generator
     import importlib
@@ -2508,12 +2508,17 @@ def _generate_thumbnail_pillow(title, mood, save_path):
         return None
 
 
+def _yt_token_path():
+    home = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+    office = f"{DATA_DIR}/yt_token_1.json"
+    return home if os.path.exists(home) else office
+
 def _get_youtube_client():
     """Build authenticated YouTube API client. Used by new post-upload features."""
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build as yt_build
-    token_path = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+    token_path = _yt_token_path()
     with open(token_path) as f:
         td = json.load(f)
     creds = Credentials(
@@ -2526,11 +2531,43 @@ def _get_youtube_client():
     return yt_build('youtube', 'v3', credentials=creds)
 
 
+def _get_channel_comments(video_id):
+    """Get all top-level comments by the channel owner on a video."""
+    try:
+        youtube = _get_youtube_client()
+        resp = youtube.commentThreads().list(
+            part="snippet", videoId=video_id, maxResults=100
+        ).execute()
+        channel_id = None
+        try:
+            ch = youtube.channels().list(part="id", mine=True).execute()
+            channel_id = ch["items"][0]["id"]
+        except:
+            pass
+        owner_comments = []
+        for item in resp.get("items", []):
+            snip = item["snippet"]["topLevelComment"]["snippet"]
+            author_id = snip.get("authorChannelId", {}).get("value", "")
+            if channel_id and author_id == channel_id:
+                owner_comments.append({
+                    "id": item["snippet"]["topLevelComment"]["id"],
+                    "text": snip.get("textOriginal", ""),
+                    "thread_id": item["id"]
+                })
+        return owner_comments
+    except Exception as e:
+        print(f"[COMMENT] Failed to get comments for {video_id}: {e}")
+        return []
+
 def post_pinned_comment(video_id, comment_text):
-    """Post a comment on the video as channel owner (displays with creator badge)."""
+    """Post a comment on the video as channel owner. Skips if already commented."""
     if not comment_text:
         return False
     try:
+        existing = _get_channel_comments(video_id)
+        if existing:
+            print(f"[COMMENT] Already {len(existing)} owner comment(s) on {video_id}, skipping")
+            return True
         youtube = _get_youtube_client()
         resp = youtube.commentThreads().insert(
             part="snippet",
@@ -2549,6 +2586,26 @@ def post_pinned_comment(video_id, comment_text):
     except Exception as e:
         print(f"[COMMENT] Failed on {video_id}: {e}")
         return False
+
+def delete_duplicate_comments(video_id):
+    """Delete all but the first owner comment on a video."""
+    try:
+        existing = _get_channel_comments(video_id)
+        if len(existing) <= 1:
+            return 0
+        youtube = _get_youtube_client()
+        deleted = 0
+        for comment in existing[1:]:
+            try:
+                youtube.comments().delete(id=comment["id"]).execute()
+                deleted += 1
+                print(f"[COMMENT] Deleted duplicate {comment['id']} on {video_id}")
+            except Exception as e:
+                print(f"[COMMENT] Failed to delete {comment['id']}: {e}")
+        return deleted
+    except Exception as e:
+        print(f"[COMMENT] Cleanup failed for {video_id}: {e}")
+        return 0
 
 
 def _save_job(job):
@@ -3073,7 +3130,7 @@ def set_youtube_thumbnail(video_id, thumbnail_path):
         from googleapiclient.discovery import build as yt_build
         from googleapiclient.http import MediaFileUpload
 
-        token_path = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+        token_path = _yt_token_path()
         with open(token_path) as f:
             td = json.load(f)
 
@@ -3115,7 +3172,7 @@ def upload_to_youtube(video_path, yt_title, description, tags, category=None, pu
         from googleapiclient.discovery import build as yt_build
         from googleapiclient.http import MediaFileUpload
 
-        token_path = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+        token_path = _yt_token_path()
         with open(token_path) as f:
             td = json.load(f)
 
@@ -3654,242 +3711,10 @@ def handle_message(msg):
         send("\n".join(lines))
         return
 
-    # ---- ELEVENLABS VOICE MANAGEMENT (admin only) ----
-
-    if text_lower.startswith("/add_voice_key") or text_lower.startswith("/addvoicekey"):
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        parts = text.split(None, 1)
-        if len(parts) < 2 or not parts[1].strip():
-            send("Usage: /add_voice_key sk_your_api_key_here")
-            return
-        api_key = parts[1].strip()
-        try:
-            req = urllib.request.Request(
-                "https://api.elevenlabs.io/v1/user",
-                headers={"xi-api-key": api_key}
-            )
-            resp = urllib.request.urlopen(req, timeout=15)
-            user_info = json.loads(resp.read().decode("utf-8"))
-            sub = user_info.get("subscription", {})
-            chars_left = sub.get("character_limit", 10000) - sub.get("character_count", 0)
-            char_limit = sub.get("character_limit", 10000)
-        except urllib.error.HTTPError as e:
-            if e.code in (401, 403):
-                send("Invalid API key. Check and try again.")
-            else:
-                send(f"ElevenLabs API error: {e.code}")
-            return
-        except Exception as e:
-            send(f"Error validating key: {e}")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {
-            "keys": [], "voice_id": "EXAVITQu4vr4xnSDxMaL",
-            "voice_name": "Sarah", "engine": "edge",
-            "model_id": "eleven_multilingual_v2"
-        })
-        for existing in el_cfg.get("keys", []):
-            if existing.get("key") == api_key:
-                send("This key is already added.")
-                return
-        el_cfg.setdefault("keys", []).append({
-            "key": api_key,
-            "label": f"Account {len(el_cfg['keys']) + 1}",
-            "added": time.strftime("%Y-%m-%d")
-        })
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        n = len(el_cfg["keys"])
-        total_chars = n * 10000
-        if el_cfg.get("engine") != "elevenlabs":
-            el_cfg["engine"] = "elevenlabs"
-            save_json(ELEVENLABS_CONFIG, el_cfg)
-        send(
-            f"<b>ElevenLabs key added!</b>\n\n"
-            f"Chars remaining: {chars_left:,}/{char_limit:,}\n"
-            f"Label: Account {n}\n"
-            f"Total keys: {n} (~{total_chars:,} chars/month)\n"
-            f"Engine: ElevenLabs (active)"
-        )
-        return
-
-    if text_lower in ["/voice_keys", "/voicekeys"]:
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {})
-        keys = el_cfg.get("keys", [])
-        if not keys:
-            send("No ElevenLabs keys configured.\nUse /add_voice_key to add one.")
-            return
-        lines = [f"<b>ElevenLabs Keys ({len(keys)})</b>\n"]
-        for i, k in enumerate(keys, 1):
-            status = "Active" if i == 1 else "Standby"
-            lines.append(f"{i}. {k.get('label', f'Key {i}')} -- {status} (added {k.get('added', '?')})")
-        lines.append(f"\nEngine: {el_cfg.get('engine', 'edge')}")
-        lines.append(f"Voice: {el_cfg.get('voice_name', 'Rachel')} ({el_cfg.get('voice_id', '?')[:12]}...)")
-        lines.append(f"Fallback: Edge TTS")
-        send("\n".join(lines))
-        return
-
-    if text_lower in ["/voice_api_status", "/voiceapistatus", "/voice_status"]:
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {})
-        keys = el_cfg.get("keys", [])
-        if not keys:
-            send("No ElevenLabs keys configured.\nUse /add_voice_key to add one.")
-            return
-        send(f"Checking {len(keys)} keys... (takes a few seconds)")
-        lines = [f"<b>ElevenLabs API Status ({len(keys)} keys)</b>\n"]
-        total_used = 0
-        total_limit = 0
-        total_remaining = 0
-        active_keys = 0
-        dead_keys = 0
-        for i, k in enumerate(keys, 1):
-            api_key = k.get("key", "")
-            label = k.get("label", f"Account {i}")
-            try:
-                req = urllib.request.Request(
-                    "https://api.elevenlabs.io/v1/user",
-                    headers={"xi-api-key": api_key}
-                )
-                resp = urllib.request.urlopen(req, timeout=10)
-                data = json.loads(resp.read().decode("utf-8"))
-                sub = data.get("subscription", {})
-                used = sub.get("character_count", 0)
-                limit = sub.get("character_limit", 0)
-                remaining = limit - used
-                tier = sub.get("tier", "?")
-                next_reset = sub.get("next_character_count_reset_unix")
-                if next_reset:
-                    import datetime
-                    reset_dt = datetime.datetime.fromtimestamp(next_reset)
-                    reset_str = reset_dt.strftime("%d %b %Y")
-                    days_left = (reset_dt - datetime.datetime.now()).days
-                    reset_info = f"Renew: {reset_str} ({days_left}d)"
-                else:
-                    reset_info = "Renew: --"
-                total_used += used
-                total_limit += limit
-                total_remaining += remaining
-                active_keys += 1
-                pct = int((used / limit * 100)) if limit > 0 else 0
-                bar = "=" * (pct // 10) + "-" * (10 - pct // 10)
-                status_icon = "LOW" if remaining < 1000 else "OK"
-                lines.append(
-                    f"{i}. {label} [{status_icon}]\n"
-                    f"   [{bar}] {used:,}/{limit:,} ({pct}% used)\n"
-                    f"   Remaining: {remaining:,} chars\n"
-                    f"   {reset_info}"
-                )
-            except urllib.error.HTTPError as e:
-                dead_keys += 1
-                lines.append(f"{i}. {label} [DEAD]\n   HTTP {e.code} - Key invalid/expired")
-            except Exception as e:
-                dead_keys += 1
-                lines.append(f"{i}. {label} [ERROR]\n   {str(e)[:50]}")
-        lines.append(f"\n<b>TOTAL</b>")
-        lines.append(f"Active: {active_keys}/{len(keys)} keys")
-        if dead_keys:
-            lines.append(f"Dead: {dead_keys} keys")
-        lines.append(f"Used: {total_used:,}/{total_limit:,} chars")
-        lines.append(f"Remaining: {total_remaining:,} chars")
-        est_videos = total_remaining // 700 if total_remaining > 0 else 0
-        lines.append(f"Est. videos left: ~{est_videos}")
-        lines.append(f"\nEngine: {el_cfg.get('engine', 'edge')}")
-        lines.append(f"Fallback: Edge TTS")
-        send("\n".join(lines))
-        return
-
-    if text_lower.startswith("/remove_voice_key") or text_lower.startswith("/removevoicekey"):
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        parts = text.split()
-        if len(parts) < 2 or not parts[1].isdigit():
-            send("Usage: /remove_voice_key <number>\nUse /voice_keys to see list.")
-            return
-        idx = int(parts[1]) - 1
-        el_cfg = load_json(ELEVENLABS_CONFIG, {})
-        keys = el_cfg.get("keys", [])
-        if idx < 0 or idx >= len(keys):
-            send(f"Invalid index. You have {len(keys)} key(s).")
-            return
-        removed = keys.pop(idx)
-        for i, k in enumerate(keys):
-            k["label"] = f"Account {i+1}"
-        el_cfg["keys"] = keys
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        send(f"Removed: {removed.get('label', '?')}\nRemaining: {len(keys)} key(s)")
-        return
-
-    if text_lower.startswith("/voice_id") or text_lower.startswith("/voiceid"):
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        parts = text.split(None, 1)
-        if len(parts) < 2 or not parts[1].strip():
-            el_cfg = load_json(ELEVENLABS_CONFIG, {})
-            send(f"Current voice ID: {el_cfg.get('voice_id', 'not set')}\nUsage: /voice_id <elevenlabs_voice_id>")
-            return
-        new_id = parts[1].strip()
-        el_cfg = load_json(ELEVENLABS_CONFIG, {
-            "keys": [], "voice_id": "EXAVITQu4vr4xnSDxMaL",
-            "voice_name": "Sarah", "engine": "edge",
-            "model_id": "eleven_multilingual_v2"
-        })
-        el_cfg["voice_id"] = new_id
-        el_cfg["voice_name"] = "Custom"
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        send(f"Voice ID set to: {new_id}")
-        return
+    # ---- VOICE COMMANDS ----
 
     if text_lower.startswith("/voice"):
-        parts = text_lower.split()
-        if len(parts) == 1:
-            el_cfg = load_json(ELEVENLABS_CONFIG, {})
-            engine = el_cfg.get("engine", "edge")
-            n_keys = len(el_cfg.get("keys", []))
-            send(
-                f"<b>Voice Engine: {engine.upper()}</b>\n\n"
-                f"ElevenLabs keys: {n_keys}\n"
-                f"Voice: {el_cfg.get('voice_name', 'Rachel')}\n"
-                f"Fallback: Edge TTS\n\n"
-                f"Commands:\n"
-                f"/voice elevenlabs - Switch to ElevenLabs\n"
-                f"/voice edge - Switch to Edge TTS\n"
-                f"/voice_id <id> - Change voice\n"
-                f"/add_voice_key <key> - Add API key\n"
-                f"/voice_keys - View keys"
-            )
-            return
-        engine = parts[1]
-        if engine not in ("elevenlabs", "edge"):
-            send("Usage: /voice elevenlabs or /voice edge")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {
-            "keys": [], "voice_id": "EXAVITQu4vr4xnSDxMaL",
-            "voice_name": "Sarah", "engine": "edge",
-            "model_id": "eleven_multilingual_v2"
-        })
-        if engine == "elevenlabs" and not el_cfg.get("keys"):
-            send("No ElevenLabs keys! Add one first:\n/add_voice_key sk_your_key_here")
-            return
-        el_cfg["engine"] = engine
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        if engine == "elevenlabs":
-            n = len(el_cfg["keys"])
-            send(f"Voice engine: ElevenLabs\nKeys: {n} (~{n*10000:,} chars/month)\nFallback: Edge TTS")
-        else:
-            send("Voice engine: Edge TTS (en-US-EmmaNeural)")
+        send("Voice: Edge TTS (en-US-EmmaNeural)\nFree, unlimited, no API keys needed.")
         return
 
     # ---- INSTANCE LOCK + SYNC COMMANDS ----
@@ -4880,10 +4705,7 @@ def main():
         {"command": "add_user", "description": "Add user (admin only)"},
         {"command": "remove_user", "description": "Remove user (admin only)"},
         {"command": "view_users", "description": "View allowed users (admin only)"},
-        {"command": "add_voice_key", "description": "Add ElevenLabs API key"},
-        {"command": "voice_keys", "description": "View voice API keys"},
-        {"command": "voice_api_status", "description": "Live API credit status"},
-        {"command": "voice", "description": "Switch voice (elevenlabs/edge)"},
+        {"command": "voice", "description": "Voice engine info"},
         {"command": "auth_drive", "description": "Authorize Google Drive (one-time)"},
         {"command": "bot_lock", "description": "Instance lock & sync status"},
         {"command": "sync_now", "description": "Force sync data to Drive"},
