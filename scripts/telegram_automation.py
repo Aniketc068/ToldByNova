@@ -53,14 +53,11 @@ GDRIVE_TOKEN_FILE = f"{DATA_DIR}/gdrive_token.json"
 # YT Shorts max 3 min, optimal 35-60s for stories
 MAX_DURATION = 180
 
-# USA peak: Shorts 12-1 PM + 7-9 PM EDT
-# Sources: SocialPilot (301K vids), Buffer (1.8M vids), IQFluence (325 campaigns),
-# Sprout Social, HopperHQ — upload 2-3 hrs before peak for algorithm indexing
 UPLOAD_SLOTS_IST = [
-    ("08:30 PM", "11:00 AM EDT"),   # USA late morning — lunchtime scroll
-    ("11:30 PM", "02:00 PM EDT"),   # USA afternoon — peak daytime engagement
-    ("02:30 AM", "05:00 PM EDT"),   # USA pre-evening — algorithm indexes before 7 PM surge
-    ("04:30 AM", "07:00 PM EDT"),   # USA evening prime — peak Shorts feed + mobile scrolling
+    ("05:30 PM", "08:00 AM EDT"),   # USA morning — before 11 AM scroll surge
+    ("09:30 PM", "12:00 PM EDT"),   # USA lunch — peak midday engagement
+    ("02:30 AM", "05:00 PM EDT"),   # USA pre-evening — before 7 PM surge
+    ("06:30 AM", "09:00 PM EDT"),   # USA prime — highest Shorts engagement
 ]
 
 
@@ -2583,9 +2580,34 @@ def _generate_thumbnail_pillow(title, mood, save_path):
 
 
 def _yt_token_path():
-    home = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
-    office = f"{DATA_DIR}/yt_token_1.json"
-    return home if os.path.exists(home) else office
+    """Try main token first, fallback to backup if refresh fails."""
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    paths = [
+        "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json",
+        f"{DATA_DIR}/yt_token_1.json",
+    ]
+    for p in paths:
+        if not os.path.exists(p):
+            continue
+        try:
+            with open(p) as f:
+                td = json.load(f)
+            creds = Credentials(
+                token=td.get('token', ''), refresh_token=td.get('refresh_token', ''),
+                token_uri='https://oauth2.googleapis.com/token',
+                client_id=td['client_id'], client_secret=td['client_secret'],
+                scopes=td.get('scopes', ['https://www.googleapis.com/auth/youtube']))
+            creds.refresh(Request())
+            td['token'] = creds.token
+            with open(p, 'w') as f:
+                json.dump(td, f, indent=2)
+            print(f"[YT] Using token: {p}")
+            return p
+        except Exception as e:
+            print(f"[YT] Token {p} failed: {e}")
+            continue
+    return paths[-1]
 
 def _get_youtube_client():
     """Build authenticated YouTube API client. Used by new post-upload features."""
@@ -3358,10 +3380,9 @@ def cleanup_assets(vid_id, video_path, yt_title):
 # ============ SCHEDULE ============
 
 def slot_label(slot_tuple, date_str=""):
-    """Format slot tuple as readable string with optional date."""
     if date_str:
-        return f"{slot_tuple[0]} IST ({slot_tuple[1]}) - {date_str}"
-    return f"{slot_tuple[0]} IST ({slot_tuple[1]})"
+        return f"{slot_tuple[1]} / {slot_tuple[0]} IST - {date_str}"
+    return f"{slot_tuple[1]} / {slot_tuple[0]} IST"
 
 def get_next_upload_slot(after_utc=None):
     """Get nearest available slot. If after_utc is set, only returns slots AFTER that time.
@@ -3859,13 +3880,20 @@ def handle_message(msg):
         slots_text = "\n".join(f"  {slot_label(s)}" for s in UPLOAD_SLOTS_IST)
         history_text = ""
         if recent:
-            history_text = "\n<b>Recent uploads:</b>\n"
+            history_text = "\n<b>Last uploads:</b>\n"
             for u in recent:
-                history_text += f"  {u.get('slot','')} on {u.get('scheduled_date','')}\n"
+                d = u.get('scheduled_date', '')
+                s = u.get('slot', '')
+                vid = u.get('video_id', '')
+                line = f"  {s} IST on {d}"
+                if vid:
+                    line += f" ({vid})"
+                history_text += line + "\n"
         send(
-            f"<b>Upload Schedule (USA Optimized)</b>\n\n"
-            f"<b>Shorts slots:</b>\n{slots_text}\n\n"
-            f"Next: <b>{slot_label(slot, next_date)}</b>"
+            f"<b>Upload Schedule</b>\n"
+            f"<i>4 Shorts/day — USA peak hours</i>\n\n"
+            f"<b>Daily Slots (EDT / IST):</b>\n{slots_text}\n\n"
+            f"<b>Next:</b> {slot_label(slot, next_date)}"
             f"{history_text}"
         )
         return
