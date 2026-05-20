@@ -57,10 +57,10 @@ MAX_DURATION = 180
 # Sources: SocialPilot (301K vids), Buffer (1.8M vids), IQFluence (325 campaigns),
 # Sprout Social, HopperHQ — upload 2-3 hrs before peak for algorithm indexing
 UPLOAD_SLOTS_IST = [
-    ("11:30 PM", "02:00 PM EDT"),   # afternoon
-    ("02:30 AM", "05:00 PM EDT"),   # pre-evening — algorithm indexes before 7 PM surge
-    ("04:30 AM", "07:00 PM EDT"),   # evening prime — peak Shorts feed + mobile scrolling
-    ("06:30 AM", "09:00 PM EDT"),   # late evening scroll — post-dinner relaxation peak
+    ("08:30 PM", "11:00 AM EDT"),   # USA late morning — lunchtime scroll
+    ("11:30 PM", "02:00 PM EDT"),   # USA afternoon — peak daytime engagement
+    ("02:30 AM", "05:00 PM EDT"),   # USA pre-evening — algorithm indexes before 7 PM surge
+    ("04:30 AM", "07:00 PM EDT"),   # USA evening prime — peak Shorts feed + mobile scrolling
 ]
 
 
@@ -70,16 +70,22 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 # ============ STATE MANAGEMENT ============
 
+_data_io_lock = threading.RLock()
+
 def load_json(path, default=None):
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return default if default is not None else {}
+    with _data_io_lock:
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return default if default is not None else {}
 
 def save_json(path, data):
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with _data_io_lock:
+        tmp = path + ".tmp"
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, path)
 
 def _sanitize_saved_seo(seo):
     """Auto-fix pre-saved SEO data on load — strips #, caps tags, cleans title."""
@@ -137,7 +143,6 @@ class BotState:
         self._clip_status_msg = None
         self.short_seo = None
         self.clip_suggestions = None
-        self.thumb_ai_bg = None
         self.load()
 
     def load(self):
@@ -155,7 +160,6 @@ class BotState:
         self.max_duration = d.get("max_duration", 0)
         self.short_seo = _sanitize_saved_seo(d.get("short_seo"))
         self.clip_suggestions = d.get("clip_suggestions")
-        self.thumb_ai_bg = d.get("thumb_ai_bg")
 
     def save(self):
         save_json(STATE_FILE, {
@@ -172,7 +176,6 @@ class BotState:
             "max_duration": self.max_duration,
             "short_seo": self.short_seo,
             "clip_suggestions": self.clip_suggestions,
-            "thumb_ai_bg": self.thumb_ai_bg,
         })
 
     def reset_for_new_video(self):
@@ -343,10 +346,6 @@ def _check_instance_lock():
         return True
     elif my_status == "OFF":
         print(f"[LOCK] Doc says {_lock_system_name}: OFF — NOT starting")
-        try:
-            _send_admin_msg(f"<b>Instance Lock: NOT starting</b>\n{_lock_system_name} is OFF in control doc.")
-        except:
-            pass
         return False
     else:
         print(f"[LOCK] No entry for {_lock_system_name} in doc — starting without lock")
@@ -421,22 +420,25 @@ def _ensure_drive_folder(service):
 _SYNC_EXCLUDE = {"gdrive_token.json", "bot.log", "bot_stdout.log", "bot_stderr.log", "cli_debug.log"}
 
 def _compute_data_hashes():
-    hashes = {}
-    if not os.path.isdir(DATA_DIR):
+    with _data_io_lock:
+        hashes = {}
+        if not os.path.isdir(DATA_DIR):
+            return hashes
+        for f in os.listdir(DATA_DIR):
+            if not f.endswith(".json") or f in _SYNC_EXCLUDE:
+                continue
+            path = os.path.join(DATA_DIR, f)
+            try:
+                with open(path, "rb") as fh:
+                    hashes[f] = hashlib.md5(fh.read()).hexdigest()
+            except:
+                pass
         return hashes
-    for f in os.listdir(DATA_DIR):
-        if not f.endswith(".json") or f in _SYNC_EXCLUDE:
-            continue
-        path = os.path.join(DATA_DIR, f)
-        try:
-            with open(path, "rb") as fh:
-                hashes[f] = hashlib.md5(fh.read()).hexdigest()
-        except:
-            pass
-    return hashes
 
 def _sync_to_drive(force=False):
     global _last_data_hashes
+    if _instance_lock_violated:
+        return
     service = _get_drive_client()
     if not service:
         return
@@ -492,7 +494,7 @@ def _sync_from_drive():
     try:
         r = service.files().list(
             q=f"'{folder_id}' in parents and trashed=false",
-            spaces="drive", fields="files(id, name)").execute()
+            spaces="drive", fields="files(id, name, modifiedTime)").execute()
         files = r.get("files", [])
     except Exception as e:
         print(f"[SYNC] List failed: {e}")
@@ -503,11 +505,22 @@ def _sync_from_drive():
         fname = f["name"]
         if fname in _SYNC_EXCLUDE or not fname.endswith(".json"):
             continue
+        path = os.path.join(DATA_DIR, fname)
+        if os.path.exists(path):
+            try:
+                import datetime as _dt
+                local_mtime = os.path.getmtime(path)
+                drive_time = _dt.datetime.fromisoformat(
+                    f.get("modifiedTime", "").replace("Z", "+00:00")).timestamp()
+                if local_mtime > drive_time:
+                    continue
+            except:
+                pass
         try:
             content = service.files().get_media(fileId=f["id"]).execute()
-            path = os.path.join(DATA_DIR, fname)
-            with open(path, "wb") as fh:
-                fh.write(content)
+            with _data_io_lock:
+                with open(path, "wb") as fh:
+                    fh.write(content)
             downloaded += 1
         except Exception as e:
             print(f"[SYNC] Download {fname} failed: {e}")
@@ -1345,18 +1358,28 @@ def search_viral_stories():
         return ""
 
     reddit_queries = [
-        "reddit AITA viral story",
-        "reddit tifu best story",
-        "reddit ProRevenge viral",
-        "reddit MaliciousCompliance best story",
-        "reddit AmItheAsshole update story",
+        "reddit AITA viral story this week",
+        "reddit ProRevenge best story this month",
+        "reddit MaliciousCompliance viral story",
+        "reddit NuclearRevenge best revenge story",
+        "reddit EntitledPeople viral Karen story",
+        "reddit ChoosingBeggars viral story",
+        "reddit PettyRevenge satisfying karma",
+        "reddit relationship_advice cheating exposed",
+        "reddit AmItheAsshole controversial update",
+        "reddit legaladvice insane lawsuit",
     ]
     news_queries = [
-        "viral news story USA court case",
-        "unbelievable true story USA lawsuit",
-        "caught on camera USA viral news",
-        "justice served news story USA",
-        "shocking true crime story USA",
+        "viral news story USA caught on camera today",
+        "shocking lawsuit USA news this week",
+        "Karen caught on camera viral USA",
+        "neighbor war viral news USA",
+        "cheating exposed viral story USA",
+        "scammer caught viral USA news",
+        "entitled person destroyed viral video",
+        "instant karma caught on camera USA",
+        "court case shocking verdict USA this week",
+        "trending drama story USA today",
     ]
 
     stories_text = []
@@ -1637,12 +1660,17 @@ def normalize_story(s):
         else:
             ending_part = _rnd.choice(_open_endings)
 
-        # Ensure CTA always includes subscribe
+        _viral_ctas = [
+            "Was this justified? Type YES or NO. Like and subscribe for more.",
+            "Would you have done the same? Comment below. Like if you agree.",
+            "Who was wrong here? Drop your answer. Hit like and subscribe.",
+            "Am I wrong for this? Tell me in the comments. Like and subscribe.",
+        ]
         has_subscribe = any('subscribe' in c.lower() for c in cta_parts)
         if not cta_parts:
-            cta_parts = ["What would you have done? Drop it in the comments. Subscribe for more stories like this."]
+            cta_parts = [random.choice(_viral_ctas)]
         elif not has_subscribe:
-            cta_parts.append("Subscribe for more stories like this")
+            cta_parts.append("Like and subscribe for more stories like this.")
 
         # Rebuild: Story → CTA → Loop cliffhanger
         script = ". ".join(story_parts).rstrip(". ") + ". "
@@ -1760,12 +1788,20 @@ def generate_stories():
     used = get_used_titles()
     used_list = "\n".join(f"- {t}" for t in used[-50:]) if used else "None yet"
 
-    dur = bot.max_duration if bot.max_duration > 0 else random.randint(33, 38)
+    dur = bot.max_duration if bot.max_duration > 0 else random.randint(28, 33)
     words_min = int(dur * 2.5)
     words_max = int(dur * 3)
     print(f"Story mode: SHORT ONLY | short={dur}s ({words_min}-{words_max}w)")
 
-    short_cta = "What would you have done? Drop it in the comments. Subscribe for more stories like this."
+    cta_options = [
+        "Was she wrong? Type YES or NO. Like and subscribe for more.",
+        "Would you have done the same? Comment below. Like if you agree.",
+        "Who was wrong here? Drop your answer. Hit like and subscribe.",
+        "Type 1 if she was right, 2 if he was. Like this and subscribe.",
+        "Am I wrong for this? Tell me in the comments. Like and subscribe.",
+        "What would you have done? Comment NOW. Double tap and subscribe.",
+    ]
+    short_cta = random.choice(cta_options)
     json_format = f"""{{"stories":[{{"title":"Short searchable title with keyword","hook":"Shocking first sentence under 10 words","script":"MANDATORY complete SHORT narration {words_min}-{words_max} words ending with {short_cta}","dramatic_words":["word1","word2","word3","word4","word5"],"mood":"dramatic","clip_suggestions":["search term 1","search term 2","search term 3","search term 4","search term 5"],"short_seo":{{"yt_title":"Viral YT Shorts title under 50 chars","description":"#shorts #storytime #redditstories + hook + summary + Follow @ToldByNova","tags":"shorts,storytime,viral,reddit stories,true story,justice,revenge,karma,real stories,plus 10 story-specific tags","category":"Entertainment"}}}}]}}"""
 
     base_rules = f"""Generate SHORT script only.
@@ -1790,10 +1826,26 @@ ONLY THESE TOPICS (USA viral drama — what people actually watch):
 - HOA revenge, landlord karma, roommate from hell stories
 THE STORY MUST HAVE: a villain, a victim, conflict, and SATISFYING REVENGE/KARMA/JUSTICE ending.
 
+===== STORY UNIQUENESS (MANDATORY — GENERIC STORIES GET 0 VIEWS) =====
+Every story MUST have a BIZARRE/UNUSUAL specific detail that makes it stand out:
+BAD (generic, oversaturated, will flop): "My boss demanded I follow rules" / "My neighbor was rude" / "My coworker stole my idea" / "My landlord was terrible" / "My ex cheated on me"
+GOOD (unique, bizarre, will go viral): "My boss made me count every paperclip — so I counted 47,000" / "My neighbor called the cops because my DOG was too happy" / "She sued Red Bull because it didn't give her wings" / "Karen broke into my house at 3 AM to complain about my lawn"
+THE DIFFERENCE: Generic = been told 1 million times. Bizarre = has ONE specific absurd detail that makes someone say "WAIT WHAT?"
+If your story could be titled "Boss/Neighbor/Ex was bad and got karma" — it is TOO GENERIC. Start over.
+===== END UNIQUENESS RULE =====
+
 RULES FOR SHORT SCRIPT (field: "script"):
 - Target: {dur} seconds. Script MUST be {words_min}-{words_max} words (voice reads at ~2.7 words/sec).
-- HOOK (first sentence): A shocking statement under 10 words that stops the scroll.
+- FIRST WORD RULE (MOST IMPORTANT — THIS DECIDES IF VIDEO GETS 200 OR 2000 VIEWS):
+  The first sentence is heard in 1 second. It MUST contain a SPECIFIC shocking detail.
+  Start with: "She", "He", "My", "They" + immediate SPECIFIC action (not vague).
+  NEVER start with: "So", "Well", "Today", "I want to", "Let me tell you", "This is a story"
+  GREAT HOOKS (specific + shocking): "She faked her own kidnapping for 22 days." / "He sued Red Bull for not giving him wings." / "My neighbor called the cops because my dog was too happy." / "Karen broke into my house at 3 AM over a lawn ornament."
+  BAD HOOKS (vague + generic): "My boss was terrible." / "My neighbor was rude to me." / "Something crazy happened." / "My ex did something unforgivable."
+  THE RULE: First sentence must have a SPECIFIC bizarre detail. "Boss demanded rules" = generic. "Boss made me count 47,000 paperclips" = specific + bizarre.
+- HOOK (first sentence): A shocking accusation with ONE bizarre specific detail, under 10 words.
 - Structure: Hook → Escalation → SECOND HOOK → Twist → CTA → Loop Cliffhanger (LAST LINE)
+- CONTROVERSY RULE: The story MUST make viewers pick a side. Include a morally gray moment where the "hero" does something questionable. Viewers should DEBATE in comments whether they were right or wrong.
 - SECOND HOOK (at ~14-15 second mark, around word 38-42 in script):
   YouTube algorithm checks retention at 15s — this is the "sustained distribution gate". You MUST insert a SURPRISE sentence here that re-hooks the viewer.
   Examples: "But here's what nobody expected." / "That's when she found the hidden camera." / "What he said next shocked everyone."
@@ -1820,8 +1872,17 @@ RULES FOR SHORT SCRIPT (field: "script"):
   TEST: Read your LAST line → then your hook. Must feel like ONE continuous story.
 - Short punchy sentences. 1 thought per sentence. Natural female narrator voice.
 SEO RULES:
-- short_seo.yt_title: Viral Shorts title under 50 chars, curiosity gap, no emojis. MUST be UNIQUE — never similar to: {used_list}
-- short_seo.description: START with hook sentence (no hashtags at start!), then summary, then "Subscribe to @ToldByNova", then LAST LINE = exactly 3 hashtags (#shorts + 2 story-specific). NEVER start description with a hashtag.
+- short_seo.yt_title: MUST follow these rules:
+  1. Under 50 chars, no emojis, no hashtags
+  2. MUST contain the BIZARRE specific detail (the thing that makes it unique)
+  3. MUST create curiosity gap — viewer needs to click to know what happened
+  4. NEVER reveal the outcome in the title ("Lost Everything", "Got Karma", "Was Destroyed" = BAD)
+  5. NEVER use generic formats: "X Gets Karma" / "X Loses Everything" / "X Was Wrong"
+  BAD TITLES: "Boss Demanded Rules Then Lost Everything" / "Karen Gets What She Deserves" / "Cheater Gets Caught"
+  GOOD TITLES: "He Sued Red Bull Because It Didn't Give Him Wings" / "She Found His Secret Phone" / "Karen's Midnight Raid Backfires"
+  THE TEST: Would someone screenshot this title and send it to a friend? If not, rewrite it.
+  MUST be UNIQUE — never similar to: {used_list}
+- short_seo.description: START with the most shocking sentence from the story (no hashtags at start!), then summary, then "Subscribe to @ToldByNova", then LAST LINE = exactly 3 hashtags (#shorts + 2 story-specific). NEVER start description with a hashtag.
 - short_seo.tags: 20 comma-separated tags starting with "shorts", mix trending + story-specific
 - All category: Entertainment
 
@@ -1834,6 +1895,8 @@ CLIP SUGGESTIONS: 5-6 search keywords matching STORY MOOD (not generic). 2-4 wor
 Channel: "Told By Nova" — female narrator, real viral true stories for USA audience.
 
 IMPORTANT: Search the web for REAL trending viral stories from Reddit (ProRevenge, AITA, MaliciousCompliance, NuclearRevenge, ChoosingBeggars, EntitledPeople), TMZ, court news. Find DRAMA/REVENGE/KARMA stories from last 1-2 months. Base your script on a REAL story — do NOT invent stories.
+
+CRITICAL: The story MUST have a BIZARRE/UNUSUAL angle. Generic "boss was mean" or "neighbor was rude" stories get ZERO views. Find stories with ABSURD specific details — the kind of detail that makes someone say "wait, WHAT?" and share it with friends. Examples: sued over Red Bull wings, broke into house at 3 AM over a lawn, faked kidnapping for attention. If your story sounds like it could happen to anyone — it is TOO BORING. Find the WEIRD ones.
 
 REMINDER: NO math, NO science, NO professors, NO genius stories, NO universities, NO inspirational academic stories. ONLY revenge, karma, drama, cheating, betrayal, court cases, neighbor wars, Karen stories. If your story has anything to do with education or academics — START OVER.
 
@@ -1981,10 +2044,18 @@ NOTE: You cannot search the web. Use the stories and trending topics provided ab
 
 def refine_story(raw_text):
     """Refine a user-provided story into a YouTube Shorts narration script."""
-    dur = bot.max_duration if bot.max_duration > 0 else random.randint(33, 38)
+    dur = bot.max_duration if bot.max_duration > 0 else random.randint(28, 33)
     words_min = int(dur * 2.5)
     words_max = int(dur * 3)
-    short_cta = "What would you have done? Drop it in the comments. Subscribe for more stories like this."
+    cta_options = [
+        "Was she wrong? Type YES or NO. Like and subscribe for more.",
+        "Would you have done the same? Comment below. Like if you agree.",
+        "Who was wrong here? Drop your answer. Hit like and subscribe.",
+        "Type 1 if she was right, 2 if he was. Like this and subscribe.",
+        "Am I wrong for this? Tell me in the comments. Like and subscribe.",
+        "What would you have done? Comment NOW. Double tap and subscribe.",
+    ]
+    short_cta = random.choice(cta_options)
     json_fmt = f"""{{"title":"Short searchable title","script":"Short narration {words_min}-{words_max} words.","dramatic_words":["word1","word2","word3"],"mood":"dramatic","clip_suggestions":["term1","term2","term3","term4","term5"]}}"""
 
     prompt = f"""TASK: Rewrite this raw story as a YouTube Shorts narration script. Output ONLY raw JSON, no markdown, no code blocks.
@@ -2152,7 +2223,7 @@ def generate_seo(title, script):
 {desc_rule}
 3. tags = a comma-separated string with EXACTLY 20 tags. NEVER use # symbol in tags — just plain words. First tag must be "shorts". Mix: shorts, storytime, viral, reddit stories, true story, justice served, satisfying, revenge, real stories, story time, plus 10 story-specific keywords relevant to USA viewers. Keep total under 480 characters.
 4. category = Entertainment
-5. pinned_comment = a single engaging question related to the story that encourages viewers to comment. Under 100 characters. Example: "Would you have done the same thing? Comment below!"
+5. pinned_comment = a DEBATE question that forces viewers to pick a side. Under 100 characters. Must use "Type YES/NO", "Comment 1 or 2", "Was she right?", or "Am I wrong?" format. Examples: "Was she wrong for exposing him? Type YES or NO" / "Type 1 if he deserved it, 2 if she went too far"
 
 STRICT RULES:
 - Tags must NOT contain # symbol (write "shorts" not "#shorts")
@@ -2201,7 +2272,7 @@ Channel: Told By Nova (female narrator, real viral true stories, USA audience)
 # ============ VOICE GENERATION ============
 
 def generate_voice(script, vid_id, mood=None):
-    """Generate voice + SRT (ElevenLabs with mood-based voice, fallback Edge TTS)"""
+    """Generate voice + SRT via Edge TTS"""
     sys.path.insert(0, SCRIPTS)
     import voice_generator
     import importlib
@@ -2511,12 +2582,17 @@ def _generate_thumbnail_pillow(title, mood, save_path):
         return None
 
 
+def _yt_token_path():
+    home = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+    office = f"{DATA_DIR}/yt_token_1.json"
+    return home if os.path.exists(home) else office
+
 def _get_youtube_client():
     """Build authenticated YouTube API client. Used by new post-upload features."""
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build as yt_build
-    token_path = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+    token_path = _yt_token_path()
     with open(token_path) as f:
         td = json.load(f)
     creds = Credentials(
@@ -2529,11 +2605,43 @@ def _get_youtube_client():
     return yt_build('youtube', 'v3', credentials=creds)
 
 
+def _get_channel_comments(video_id):
+    """Get all top-level comments by the channel owner on a video."""
+    try:
+        youtube = _get_youtube_client()
+        resp = youtube.commentThreads().list(
+            part="snippet", videoId=video_id, maxResults=100
+        ).execute()
+        channel_id = None
+        try:
+            ch = youtube.channels().list(part="id", mine=True).execute()
+            channel_id = ch["items"][0]["id"]
+        except:
+            pass
+        owner_comments = []
+        for item in resp.get("items", []):
+            snip = item["snippet"]["topLevelComment"]["snippet"]
+            author_id = snip.get("authorChannelId", {}).get("value", "")
+            if channel_id and author_id == channel_id:
+                owner_comments.append({
+                    "id": item["snippet"]["topLevelComment"]["id"],
+                    "text": snip.get("textOriginal", ""),
+                    "thread_id": item["id"]
+                })
+        return owner_comments
+    except Exception as e:
+        print(f"[COMMENT] Failed to get comments for {video_id}: {e}")
+        return []
+
 def post_pinned_comment(video_id, comment_text):
-    """Post a comment on the video as channel owner (displays with creator badge)."""
+    """Post a comment on the video as channel owner. Skips if already commented."""
     if not comment_text:
         return False
     try:
+        existing = _get_channel_comments(video_id)
+        if existing:
+            print(f"[COMMENT] Already {len(existing)} owner comment(s) on {video_id}, skipping")
+            return True
         youtube = _get_youtube_client()
         resp = youtube.commentThreads().insert(
             part="snippet",
@@ -2553,6 +2661,26 @@ def post_pinned_comment(video_id, comment_text):
         print(f"[COMMENT] Failed on {video_id}: {e}")
         return False
 
+def delete_duplicate_comments(video_id):
+    """Delete all but the first owner comment on a video."""
+    try:
+        existing = _get_channel_comments(video_id)
+        if len(existing) <= 1:
+            return 0
+        youtube = _get_youtube_client()
+        deleted = 0
+        for comment in existing[1:]:
+            try:
+                youtube.comments().delete(id=comment["id"]).execute()
+                deleted += 1
+                print(f"[COMMENT] Deleted duplicate {comment['id']} on {video_id}")
+            except Exception as e:
+                print(f"[COMMENT] Failed to delete {comment['id']}: {e}")
+        return deleted
+    except Exception as e:
+        print(f"[COMMENT] Cleanup failed for {video_id}: {e}")
+        return 0
+
 
 def _save_job(job):
     """Save a background job to persistent file so it survives restarts."""
@@ -2569,6 +2697,30 @@ def _remove_job(job_id):
     jobs = [j for j in jobs if j.get("id") != job_id]
     save_json(JOBS_FILE, jobs)
     print(f"[JOBS] Removed: {job_id}")
+
+def _claim_job(job_id):
+    """Claim a job for this system. Returns True if claimed, False if already claimed by another."""
+    import datetime as _dt
+    jobs = load_json(JOBS_FILE, [])
+    for job in jobs:
+        if job.get("id") == job_id:
+            claimed = job.get("claimed_by")
+            if claimed and claimed != _lock_system_name:
+                claim_time = job.get("claimed_at", "")
+                try:
+                    ct = _dt.datetime.fromisoformat(claim_time.replace("Z", "+00:00"))
+                    age = (_dt.datetime.now(_dt.timezone.utc) - ct).total_seconds()
+                    if age < 3600:
+                        return False
+                except:
+                    return False
+            job["claimed_by"] = _lock_system_name
+            job["claimed_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+            break
+    else:
+        return False
+    save_json(JOBS_FILE, jobs)
+    return True
 
 
 def _wait_for_video_public(video_id, publish_at=None, max_wait_hours=48):
@@ -2747,11 +2899,14 @@ def _auto_reply_comments(video_id, duration_minutes=60, max_replies=5):
     print(f"[COMMENTS] Auto-reply started for {video_id} ({duration_minutes}min, max {max_replies})")
 
     reply_templates = [
-        "Thank you so much for watching! Your support means everything 🙏",
-        "So glad you enjoyed this story! More coming soon 💛",
-        "Thanks for sharing your thoughts! What story should we cover next?",
-        "Wow, thank you for this comment! Don't forget to subscribe for daily stories 🔔",
-        "Really appreciate you watching the full video! Stay tuned for more 🎬",
+        "Right?! What would YOU have done though? I need to know 👀",
+        "This one was WILD. But wait till you see tomorrow's story 🔥",
+        "Exactly! But do you think they went too far? Be honest 💭",
+        "You're so right! Like and subscribe if you want part 2 of this 👆",
+        "I couldn't believe it either! Drop a 🔥 if you want more stories like this",
+        "The real question is... was it justified? Tell me below 👇",
+        "Your take is interesting! But what about the other side? 🤔",
+        "Facts! Share this with someone who needs to hear it 📲",
     ]
 
     while time.time() - start < duration_minutes * 60 and reply_count < max_replies:
@@ -2805,105 +2960,6 @@ def start_auto_reply(video_id):
     print(f"[COMMENTS] Auto-reply thread started for {video_id}")
 
 
-def _generate_alt_titles(title, story_title, script_excerpt):
-    """Generate 2 alternative titles using AI for A/B testing."""
-    prompt = f"""Generate exactly 2 alternative YouTube titles for this video. The current title is: "{title}"
-Story: {story_title}
-Script excerpt: {script_excerpt[:300]}
-
-Rules:
-- Each title under 60 characters
-- Searchable, clickable, different angle from current title
-- Include keywords like "true story", "what happened", "justice" etc.
-- No emojis, no hashtags
-- Output ONLY a JSON array of 2 strings, nothing else.
-Example: ["Title One Here", "Title Two Here"]"""
-    result = claude_run(prompt, timeout=60)
-    if not result:
-        return []
-    try:
-        cleaned = result.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r'^```\w*\n?', '', cleaned)
-            cleaned = re.sub(r'\n?```$', '', cleaned)
-        titles = json.loads(cleaned.strip())
-        if isinstance(titles, list) and len(titles) >= 2:
-            return [t.strip()[:60] for t in titles[:2]]
-    except:
-        pass
-    return []
-
-
-def _ab_test_title(video_id, original_title, alt_titles, job_id=None, check_after=None):
-    """After 48 hours, check which title idea performs best. Runs in background."""
-    import datetime as _dt
-    try:
-        if check_after:
-            try:
-                check_time = _dt.datetime.fromisoformat(check_after.replace("Z", "+00:00"))
-                now = _dt.datetime.now(_dt.timezone.utc)
-                wait_secs = (check_time - now).total_seconds()
-                if wait_secs > 0:
-                    print(f"[AB-TEST] Waiting {wait_secs/3600:.1f}h before checking {video_id}")
-                    time.sleep(wait_secs)
-            except:
-                time.sleep(48 * 3600)
-        else:
-            time.sleep(48 * 3600)
-
-        youtube = _get_youtube_client()
-        resp = youtube.videos().list(part="statistics", id=video_id).execute()
-        if not resp.get("items"):
-            print(f"[AB-TEST] Video {video_id} not found")
-            return
-        stats = resp["items"][0]["statistics"]
-        views = int(stats.get("viewCount", 0))
-
-        if views < 50:
-            print(f"[AB-TEST] Only {views} views after 48h — trying title swap")
-            new_title = alt_titles[0] if alt_titles else None
-            if new_title and new_title != original_title:
-                youtube.videos().update(
-                    part="snippet",
-                    body={
-                        "id": video_id,
-                        "snippet": {
-                            "title": new_title,
-                            "categoryId": "24"
-                        }
-                    }
-                ).execute()
-                print(f"[AB-TEST] Title changed: '{original_title}' -> '{new_title}'")
-            else:
-                print(f"[AB-TEST] No alternative title available")
-        else:
-            print(f"[AB-TEST] {views} views — title performing OK, keeping: '{original_title}'")
-    except Exception as e:
-        print(f"[AB-TEST] Failed for {video_id}: {e}")
-    finally:
-        if job_id:
-            _remove_job(job_id)
-
-
-def start_ab_test(video_id, original_title, story_title, script_excerpt):
-    """Generate alt titles, save persistent job, and schedule A/B test in background."""
-    import datetime as _dt
-    alt_titles = _generate_alt_titles(original_title, story_title, script_excerpt)
-    if alt_titles:
-        job_id = f"ab_test_{video_id}"
-        check_after = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=48)).isoformat()
-        _save_job({
-            "id": job_id, "type": "ab_test",
-            "video_id": video_id, "original_title": original_title,
-            "alt_titles": alt_titles, "check_after": check_after,
-            "created": _dt.datetime.now(_dt.timezone.utc).isoformat()
-        })
-        print(f"[AB-TEST] Alt titles for {video_id}: {alt_titles}")
-        threading.Thread(target=_ab_test_title,
-                        args=(video_id, original_title, alt_titles, job_id, check_after),
-                        daemon=True).start()
-    else:
-        print(f"[AB-TEST] Could not generate alt titles for {video_id}")
 
 
 def _check_video_is_public(video_id):
@@ -2942,11 +2998,13 @@ def _periodic_job_check():
             jid = job.get("id")
             if jid in _active_comment_threads:
                 continue
+            if not _claim_job(jid):
+                continue
             is_public = _check_video_is_public(vid)
             if is_public:
                 print(f"[JOBS-CHECK] {vid} is public — posting comment now")
                 _remove_job(jid)
-                comment = job.get("comment_text") or "What would you have done in this situation? Comment below!"
+                comment = job.get("comment_text") or "Was this justified? Type YES or NO below!"
                 ok = post_pinned_comment(vid, comment)
                 if ok:
                     _send_admin_msg(f"Pinned comment posted on {vid}")
@@ -2964,27 +3022,28 @@ def _resume_pending_jobs():
         jtype = job.get("type")
         vid = job.get("video_id")
         jid = job.get("id")
+        if not _claim_job(jid):
+            print(f"[JOBS] Skipping {jid} — claimed by another system")
+            continue
         if jtype == "post_comment":
             is_public = _check_video_is_public(vid)
             if is_public:
                 print(f"[JOBS] Video {vid} already public — posting comment immediately")
                 _remove_job(jid)
-                comment = job.get("comment_text") or "What would you have done in this situation? Comment below!"
+                comment = job.get("comment_text") or "Was this justified? Type YES or NO below!"
                 ok = post_pinned_comment(vid, comment)
                 if ok:
                     _send_admin_msg(f"Pinned comment posted on {vid}")
             else:
-                fallback_comment = job.get("comment_text") or "What would you have done in this situation? Comment below!"
+                fallback_comment = job.get("comment_text") or "Was this justified? Type YES or NO below!"
                 _active_comment_threads.add(jid)
                 threading.Thread(target=_deferred_post_upload,
                     args=(vid, fallback_comment, job.get("publish_at"), jid),
                     daemon=False).start()
                 print(f"[JOBS] Resumed comment+reply for {vid} (waiting for public)")
         elif jtype == "ab_test":
-            threading.Thread(target=_ab_test_title,
-                args=(vid, job.get("original_title"), job.get("alt_titles"), jid, job.get("check_after")),
-                daemon=False).start()
-            print(f"[JOBS] Resumed A/B test for {vid}")
+            _remove_job(jid)
+            print(f"[JOBS] Removed old A/B test job for {vid}")
         else:
             print(f"[JOBS] Unknown job type: {jtype}, removing")
             _remove_job(jid)
@@ -3076,7 +3135,7 @@ def set_youtube_thumbnail(video_id, thumbnail_path):
         from googleapiclient.discovery import build as yt_build
         from googleapiclient.http import MediaFileUpload
 
-        token_path = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+        token_path = _yt_token_path()
         with open(token_path) as f:
             td = json.load(f)
 
@@ -3118,7 +3177,7 @@ def upload_to_youtube(video_path, yt_title, description, tags, category=None, pu
         from googleapiclient.discovery import build as yt_build
         from googleapiclient.http import MediaFileUpload
 
-        token_path = "C:/Users/chatu/mcp-servers/youtube-mcp-server/token.json"
+        token_path = _yt_token_path()
         with open(token_path) as f:
             td = json.load(f)
 
@@ -3657,242 +3716,10 @@ def handle_message(msg):
         send("\n".join(lines))
         return
 
-    # ---- ELEVENLABS VOICE MANAGEMENT (admin only) ----
-
-    if text_lower.startswith("/add_voice_key") or text_lower.startswith("/addvoicekey"):
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        parts = text.split(None, 1)
-        if len(parts) < 2 or not parts[1].strip():
-            send("Usage: /add_voice_key sk_your_api_key_here")
-            return
-        api_key = parts[1].strip()
-        try:
-            req = urllib.request.Request(
-                "https://api.elevenlabs.io/v1/user",
-                headers={"xi-api-key": api_key}
-            )
-            resp = urllib.request.urlopen(req, timeout=15)
-            user_info = json.loads(resp.read().decode("utf-8"))
-            sub = user_info.get("subscription", {})
-            chars_left = sub.get("character_limit", 10000) - sub.get("character_count", 0)
-            char_limit = sub.get("character_limit", 10000)
-        except urllib.error.HTTPError as e:
-            if e.code in (401, 403):
-                send("Invalid API key. Check and try again.")
-            else:
-                send(f"ElevenLabs API error: {e.code}")
-            return
-        except Exception as e:
-            send(f"Error validating key: {e}")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {
-            "keys": [], "voice_id": "EXAVITQu4vr4xnSDxMaL",
-            "voice_name": "Sarah", "engine": "edge",
-            "model_id": "eleven_multilingual_v2"
-        })
-        for existing in el_cfg.get("keys", []):
-            if existing.get("key") == api_key:
-                send("This key is already added.")
-                return
-        el_cfg.setdefault("keys", []).append({
-            "key": api_key,
-            "label": f"Account {len(el_cfg['keys']) + 1}",
-            "added": time.strftime("%Y-%m-%d")
-        })
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        n = len(el_cfg["keys"])
-        total_chars = n * 10000
-        if el_cfg.get("engine") != "elevenlabs":
-            el_cfg["engine"] = "elevenlabs"
-            save_json(ELEVENLABS_CONFIG, el_cfg)
-        send(
-            f"<b>ElevenLabs key added!</b>\n\n"
-            f"Chars remaining: {chars_left:,}/{char_limit:,}\n"
-            f"Label: Account {n}\n"
-            f"Total keys: {n} (~{total_chars:,} chars/month)\n"
-            f"Engine: ElevenLabs (active)"
-        )
-        return
-
-    if text_lower in ["/voice_keys", "/voicekeys"]:
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {})
-        keys = el_cfg.get("keys", [])
-        if not keys:
-            send("No ElevenLabs keys configured.\nUse /add_voice_key to add one.")
-            return
-        lines = [f"<b>ElevenLabs Keys ({len(keys)})</b>\n"]
-        for i, k in enumerate(keys, 1):
-            status = "Active" if i == 1 else "Standby"
-            lines.append(f"{i}. {k.get('label', f'Key {i}')} -- {status} (added {k.get('added', '?')})")
-        lines.append(f"\nEngine: {el_cfg.get('engine', 'edge')}")
-        lines.append(f"Voice: {el_cfg.get('voice_name', 'Rachel')} ({el_cfg.get('voice_id', '?')[:12]}...)")
-        lines.append(f"Fallback: Edge TTS")
-        send("\n".join(lines))
-        return
-
-    if text_lower in ["/voice_api_status", "/voiceapistatus", "/voice_status"]:
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {})
-        keys = el_cfg.get("keys", [])
-        if not keys:
-            send("No ElevenLabs keys configured.\nUse /add_voice_key to add one.")
-            return
-        send(f"Checking {len(keys)} keys... (takes a few seconds)")
-        lines = [f"<b>ElevenLabs API Status ({len(keys)} keys)</b>\n"]
-        total_used = 0
-        total_limit = 0
-        total_remaining = 0
-        active_keys = 0
-        dead_keys = 0
-        for i, k in enumerate(keys, 1):
-            api_key = k.get("key", "")
-            label = k.get("label", f"Account {i}")
-            try:
-                req = urllib.request.Request(
-                    "https://api.elevenlabs.io/v1/user",
-                    headers={"xi-api-key": api_key}
-                )
-                resp = urllib.request.urlopen(req, timeout=10)
-                data = json.loads(resp.read().decode("utf-8"))
-                sub = data.get("subscription", {})
-                used = sub.get("character_count", 0)
-                limit = sub.get("character_limit", 0)
-                remaining = limit - used
-                tier = sub.get("tier", "?")
-                next_reset = sub.get("next_character_count_reset_unix")
-                if next_reset:
-                    import datetime
-                    reset_dt = datetime.datetime.fromtimestamp(next_reset)
-                    reset_str = reset_dt.strftime("%d %b %Y")
-                    days_left = (reset_dt - datetime.datetime.now()).days
-                    reset_info = f"Renew: {reset_str} ({days_left}d)"
-                else:
-                    reset_info = "Renew: --"
-                total_used += used
-                total_limit += limit
-                total_remaining += remaining
-                active_keys += 1
-                pct = int((used / limit * 100)) if limit > 0 else 0
-                bar = "=" * (pct // 10) + "-" * (10 - pct // 10)
-                status_icon = "LOW" if remaining < 1000 else "OK"
-                lines.append(
-                    f"{i}. {label} [{status_icon}]\n"
-                    f"   [{bar}] {used:,}/{limit:,} ({pct}% used)\n"
-                    f"   Remaining: {remaining:,} chars\n"
-                    f"   {reset_info}"
-                )
-            except urllib.error.HTTPError as e:
-                dead_keys += 1
-                lines.append(f"{i}. {label} [DEAD]\n   HTTP {e.code} - Key invalid/expired")
-            except Exception as e:
-                dead_keys += 1
-                lines.append(f"{i}. {label} [ERROR]\n   {str(e)[:50]}")
-        lines.append(f"\n<b>TOTAL</b>")
-        lines.append(f"Active: {active_keys}/{len(keys)} keys")
-        if dead_keys:
-            lines.append(f"Dead: {dead_keys} keys")
-        lines.append(f"Used: {total_used:,}/{total_limit:,} chars")
-        lines.append(f"Remaining: {total_remaining:,} chars")
-        est_videos = total_remaining // 700 if total_remaining > 0 else 0
-        lines.append(f"Est. videos left: ~{est_videos}")
-        lines.append(f"\nEngine: {el_cfg.get('engine', 'edge')}")
-        lines.append(f"Fallback: Edge TTS")
-        send("\n".join(lines))
-        return
-
-    if text_lower.startswith("/remove_voice_key") or text_lower.startswith("/removevoicekey"):
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        parts = text.split()
-        if len(parts) < 2 or not parts[1].isdigit():
-            send("Usage: /remove_voice_key <number>\nUse /voice_keys to see list.")
-            return
-        idx = int(parts[1]) - 1
-        el_cfg = load_json(ELEVENLABS_CONFIG, {})
-        keys = el_cfg.get("keys", [])
-        if idx < 0 or idx >= len(keys):
-            send(f"Invalid index. You have {len(keys)} key(s).")
-            return
-        removed = keys.pop(idx)
-        for i, k in enumerate(keys):
-            k["label"] = f"Account {i+1}"
-        el_cfg["keys"] = keys
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        send(f"Removed: {removed.get('label', '?')}\nRemaining: {len(keys)} key(s)")
-        return
-
-    if text_lower.startswith("/voice_id") or text_lower.startswith("/voiceid"):
-        user_id = msg.get("from", {}).get("id")
-        if not is_admin(user_id):
-            send("Admin only.")
-            return
-        parts = text.split(None, 1)
-        if len(parts) < 2 or not parts[1].strip():
-            el_cfg = load_json(ELEVENLABS_CONFIG, {})
-            send(f"Current voice ID: {el_cfg.get('voice_id', 'not set')}\nUsage: /voice_id <elevenlabs_voice_id>")
-            return
-        new_id = parts[1].strip()
-        el_cfg = load_json(ELEVENLABS_CONFIG, {
-            "keys": [], "voice_id": "EXAVITQu4vr4xnSDxMaL",
-            "voice_name": "Sarah", "engine": "edge",
-            "model_id": "eleven_multilingual_v2"
-        })
-        el_cfg["voice_id"] = new_id
-        el_cfg["voice_name"] = "Custom"
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        send(f"Voice ID set to: {new_id}")
-        return
+    # ---- VOICE COMMANDS ----
 
     if text_lower.startswith("/voice"):
-        parts = text_lower.split()
-        if len(parts) == 1:
-            el_cfg = load_json(ELEVENLABS_CONFIG, {})
-            engine = el_cfg.get("engine", "edge")
-            n_keys = len(el_cfg.get("keys", []))
-            send(
-                f"<b>Voice Engine: {engine.upper()}</b>\n\n"
-                f"ElevenLabs keys: {n_keys}\n"
-                f"Voice: {el_cfg.get('voice_name', 'Rachel')}\n"
-                f"Fallback: Edge TTS\n\n"
-                f"Commands:\n"
-                f"/voice elevenlabs - Switch to ElevenLabs\n"
-                f"/voice edge - Switch to Edge TTS\n"
-                f"/voice_id <id> - Change voice\n"
-                f"/add_voice_key <key> - Add API key\n"
-                f"/voice_keys - View keys"
-            )
-            return
-        engine = parts[1]
-        if engine not in ("elevenlabs", "edge"):
-            send("Usage: /voice elevenlabs or /voice edge")
-            return
-        el_cfg = load_json(ELEVENLABS_CONFIG, {
-            "keys": [], "voice_id": "EXAVITQu4vr4xnSDxMaL",
-            "voice_name": "Sarah", "engine": "edge",
-            "model_id": "eleven_multilingual_v2"
-        })
-        if engine == "elevenlabs" and not el_cfg.get("keys"):
-            send("No ElevenLabs keys! Add one first:\n/add_voice_key sk_your_key_here")
-            return
-        el_cfg["engine"] = engine
-        save_json(ELEVENLABS_CONFIG, el_cfg)
-        if engine == "elevenlabs":
-            n = len(el_cfg["keys"])
-            send(f"Voice engine: ElevenLabs\nKeys: {n} (~{n*10000:,} chars/month)\nFallback: Edge TTS")
-        else:
-            send("Voice engine: Edge TTS (en-US-EmmaNeural)")
+        send("Voice: Edge TTS (en-US-EmmaNeural)\nFree, unlimited, no API keys needed.")
         return
 
     # ---- INSTANCE LOCK + SYNC COMMANDS ----
@@ -3986,7 +3813,7 @@ def handle_message(msg):
         bot._clip_status_msg = None
         if bot.state in ["CLIPS_COLLECTING", "CLIPS_READY"]:
             bot.state = "CLIPS_COLLECTING"
-            bot.save()
+        bot.save()
         send(f"Cleared {deleted} clips. Send new clips.",
              reply_markup=btn(("Clips", "/clips")))
         return
@@ -4226,7 +4053,7 @@ def handle_message(msg):
     # ---- CLIP COLLECTION ----
 
     if text_lower == "/clips":
-        if bot.state not in ["STORY_APPROVED", "CLIPS_COLLECTING"]:
+        if bot.state not in ["STORY_APPROVED", "CLIPS_COLLECTING", "VOICE_DONE"]:
             if not bot.current_script:
                 send("No story approved yet.",
                      reply_markup=btn(("Auto", "/auto"), ("Story", "/story")))
@@ -4482,17 +4309,14 @@ def handle_message(msg):
                 edit_msg(pro_mid, "⏳ <b>PRO features...</b>\n⏭ Captions skipped\n<code>[ playlist ]</code>")
             if add_to_playlist(vid_id):
                 edit_msg(pro_mid, f"⏳ <b>PRO features...</b>\n✅ Captions\n✅ Playlist\n<code>[ comment ]</code>")
-            scomment = seo.get('pinned_comment', '') or "What would you have done in this situation? Comment below!"
+            scomment = seo.get('pinned_comment', '') or "Was this justified? Type YES or NO below!"
             schedule_post_upload(vid_id, scomment, publish_at=publish_at)
-            edit_msg(pro_mid, "⏳ <b>PRO features...</b>\n✅ Captions\n✅ Playlist\n✅ Comment scheduled\n<code>[ A/B test ]</code>")
-            start_ab_test(vid_id, seo['yt_title'], bot.current_story,
-                          bot.current_script[:300] if bot.current_script else "")
-            edit_msg(pro_mid, "✅ <b>All PRO features done!</b>\n✅ Captions\n✅ Playlist\n✅ Comment\n✅ A/B test")
+            edit_msg(pro_mid, "✅ <b>All PRO features done!</b>\n✅ Captions\n✅ Playlist\n✅ Comment scheduled")
 
             bot.state = "UPLOADED"
             bot.save()
 
-            pro_status = "multilang captions, comment, auto-reply, playlists, A/B test"
+            pro_status = "multilang captions, comment, auto-reply, playlists"
             summary = (
                 f"<b>Scheduled on YouTube!</b>\n"
                 f"Short: {result}\n"
@@ -4541,18 +4365,6 @@ def handle_message(msg):
             bot.save()
 
             send_and_notify(f"Story approved: <b>{title}</b>\nMood: {bot.mood}\n\nGenerating voice + subtitles...")
-
-            def _pre_generate_thumbnail():
-                try:
-                    thumb_path = generate_thumbnail(title, mood=bot.mood)
-                    if thumb_path:
-                        bot.thumb_ai_bg = thumb_path
-                        bot.save()
-                        print(f"[THUMB] Pre-generated thumbnail: {thumb_path}")
-                except Exception as e:
-                    print(f"[THUMB] Pre-generation failed (will retry at upload): {e}")
-
-            threading.Thread(target=_pre_generate_thumbnail, daemon=True).start()
 
             _generate_voice_for_current()
 
@@ -4833,16 +4645,13 @@ def main():
     init_users()
     flush_old()
     load_url_history()
-    try:
-        _resume_pending_jobs()
-    except Exception as _rj_err:
-        print(f"[WARN] Resume jobs failed: {_rj_err}")
 
     # ---- Instance Lock + Data Sync ----
     try:
         _sync_from_drive()
     except Exception as _sync_err:
         print(f"[WARN] Drive sync failed: {_sync_err}")
+    bot.load()
     try:
         if not _check_instance_lock():
             raise SystemExit
@@ -4850,6 +4659,10 @@ def main():
         raise
     except Exception as _lock_err:
         print(f"[WARN] Instance lock failed: {_lock_err} — starting without lock")
+    try:
+        _resume_pending_jobs()
+    except Exception as _rj_err:
+        print(f"[WARN] Resume jobs failed: {_rj_err}")
     threading.Thread(target=_lock_watcher_loop, daemon=True).start()
     print("[LOCK] Watcher thread started (5s interval)")
     if os.path.exists(GDRIVE_TOKEN_FILE):
@@ -4895,10 +4708,7 @@ def main():
         {"command": "add_user", "description": "Add user (admin only)"},
         {"command": "remove_user", "description": "Remove user (admin only)"},
         {"command": "view_users", "description": "View allowed users (admin only)"},
-        {"command": "add_voice_key", "description": "Add ElevenLabs API key"},
-        {"command": "voice_keys", "description": "View voice API keys"},
-        {"command": "voice_api_status", "description": "Live API credit status"},
-        {"command": "voice", "description": "Switch voice (elevenlabs/edge)"},
+        {"command": "voice", "description": "Voice engine info"},
         {"command": "auth_drive", "description": "Authorize Google Drive (one-time)"},
         {"command": "bot_lock", "description": "Instance lock & sync status"},
         {"command": "sync_now", "description": "Force sync data to Drive"},

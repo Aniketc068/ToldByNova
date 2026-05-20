@@ -2,17 +2,9 @@
 
 **100% Free & Open Source** | [MIT License](LICENSE)
 
-A fully automated YouTube Shorts factory controlled entirely from Telegram. AI generates viral stories, human-quality voice narrates them, FFmpeg builds pro-quality videos with effects, and YouTube uploads are scheduled at peak USA viewing hours - all hands-free.
+A fully automated YouTube Shorts factory controlled entirely from Telegram. AI generates viral stories, Edge TTS narrates them, FFmpeg builds pro-quality videos with effects, and YouTube uploads are scheduled at peak USA viewing hours - all hands-free.
 
-**1,060+ subscribers and 18,500+ views in 6 days** - every video automated from story to upload.
-
-### Top Performing Videos (Bot-Generated)
-
-| # | Video | Views |
-|---|-------|-------|
-| 1 | [Karen's Midnight Raid Backfires](https://youtube.com/shorts/ikziz7pWbac) | 1,472 |
-| 2 | [He Sued Red Bull Because It Didn't Give Him Wings](https://youtube.com/shorts/DzBWc4Ve3X4) | 1,326 |
-| 3 | [She Found His Secret Phone and Destroyed His Life](https://youtube.com/shorts/okfESIzlBZU) | 1,237 |
+**1,060+ subscribers and 18,500+ views in 7 days** - every video automated from story to upload.
 
 ---
 
@@ -22,34 +14,12 @@ A fully automated YouTube Shorts factory controlled entirely from Telegram. AI g
 |--------|-------|
 | Channel | [Told By Nova](https://www.youtube.com/@ToldByNova) |
 | Started | May 12, 2026 |
-| Subscribers | 1,060+ (in 6 days) |
+| Subscribers | 1,060+ |
 | Total Views | 18,500+ |
-| Total Videos | 22 |
+| Total Videos | 30+ |
 | Avg Views/Short | 900-1,300 per video |
 | Upload Frequency | 4 videos/day (fully automated scheduling) |
-| Best Performing | "He Sued Red Bull Because It Didn't Give Him Wings" - 1,326 views |
-
-### Video Performance (All Bot-Generated)
-
-| Date | Video | Views | Likes | Duration |
-|------|-------|-------|-------|----------|
-| May 17 | Landlord Steals Deposit Then Loses Everything | 1,242 | 22 | 34s |
-| May 17 | Banned Athlete Sues For Millions | 1,078 | 15 | 36s |
-| May 17 | Entitled Neighbor Messes With Dogs | 1,013 | 16 | 35s |
-| May 16 | He Thought He Was Dining In Peace | 1,204 | 10 | 32s |
-| May 16 | He Picked The Worst Song Ever | 912 | 4 | 36s |
-| May 16 | Karen's Midnight Raid Backfires | 1,472 | 30 | 36s |
-| May 15 | Delivery Driver Steals Pet Cat on Camera | 1,140 | 11 | 36s |
-| May 15 | He Asked Me To Help Him Cheat | 1,073 | 7 | 32s |
-| May 15 | She Found His Secret Phone and Destroyed His Life | 1,237 | 12 | 34s |
-| May 14 | She Found Every Receipt and Made Him Pay in Court | 970 | 16 | 37s |
-| May 14 | He Said 'Do You Know Who I Am' to the Wrong Person | 965 | 19 | 35s |
-| May 13 | She Tested Subway's Tuna and Called a Lawyer | 1,087 | 17 | 43s |
-| May 13 | She Almost Threw Away a $24 Million Lottery Ticket | 1,107 | 55 | 41s |
-| May 13 | Walmart Cashier Saw a Girl Mouth 'HELP ME' | 879 | 15 | 45s |
-| May 13 | He Sued Red Bull Because It Didn't Give Him Wings | 1,326 | 28 | 33s |
-| May 12 | Everyone Laughed When She Sued McDonald's Over Coffee | 954 | 48 | 43s |
-| May 13 | She Called 911 and Ordered a Pizza to Escape Him | 1,085 | 8 | 34s |
+| Voice Engine | Edge TTS (Microsoft Emma Neural) - free, unlimited, no API keys |
 
 **Key Finding:** 33-38 second videos consistently get 900-1,300+ views. Videos over 45 seconds perform worse. The bot targets 33-38s by default.
 
@@ -66,27 +36,16 @@ A fully automated YouTube Shorts factory controlled entirely from Telegram. AI g
 - Manual story submission with AI refinement
 - Duration targeting: 33-38s sweet spot (configurable 15-180s)
 
-### Voice (Human-Quality)
-- ElevenLabs TTS with multi-account key rotation (waterfall - tries each key until one works)
-- Mood-based automatic voice selection - 5 different female voices matched to story mood
-- Edge TTS fallback (Microsoft Emma Neural) - always available, free, unlimited
-- Word-level SRT subtitle generation from both engines
-- Per-key quota monitoring with live status check
-
-### Voice Mood Mapping
-| Mood | Voice | Style |
-|------|-------|-------|
-| Suspense / Dark / Horror | Lily | Velvety, dramatic |
-| Dramatic / Revenge / Justice | Sarah | Mature, confident (default) |
-| Happy / Upbeat / Funny | Jessica | Playful, bright |
-| Emotional / Sad / Heartfelt | Matilda | Warm, professional |
-| Mysterious / Twist | Laura | Enthusiastic, quirky |
+### Voice (Edge TTS)
+- Microsoft Edge TTS (en-US-EmmaNeural) - free, unlimited, no API keys needed
+- Word-level SRT subtitle generation with precise timing
+- No rate limits, no account bans, works forever
 
 ### Video Pipeline (FFmpeg)
 - Multi-threaded segment building (3-4 parallel workers)
 - GPU encoding (NVENC) with automatic CPU fallback
 - 6 random subtitle color styles with dramatic word highlighting (68 keywords like "fired", "pregnant", "million", "arrested" shown in highlight color)
-- Mood-based background music (5 moods) with 15-second delayed fade-in
+- Mood-based background music (5 moods) with instant start from track midpoint (seamless loop)
 - Subscribe overlay (chromakey green screen removal) timed to narrator
 - Vignette effect for cinematic look
 - Auto video compression for Telegram preview (720p -> 480p fallback)
@@ -102,11 +61,9 @@ A fully automated YouTube Shorts factory controlled entirely from Telegram. AI g
 ### Post-Upload Automation (All Automatic)
 - Multilingual captions - English + Spanish, French, German, Portuguese (AI-translated)
 - Auto-playlist management - creates and maintains playlist
-- Pinned comment - AI-generated engaging question, deferred until video goes public
+- Pinned comment - AI-generated engaging question, deferred until video goes public (duplicate prevention across systems)
 - Auto-reply to viewer comments - replies to first 5 comments with rotating templates (runs 60 min after publish)
 - A/B title testing - generates 2 alternative titles, checks views after 48h, auto-swaps if underperforming (<50 views)
-- AI thumbnail generation - 6 model chain (Pollinations.ai) + Pillow fallback with mood-based styling
-- Custom thumbnail upload via YouTube API
 - Community post text generation
 
 ### Multi-System Instance Lock + Data Sync
@@ -117,6 +74,7 @@ A fully automated YouTube Shorts factory controlled entirely from Telegram. AI g
 - On startup, bot downloads latest data from Drive so the new system continues where the last one left off
 - One-time OAuth setup per system via `/auth_drive` command
 - Add unlimited systems - just add `system_NAME=ip1,ip2` in `.env`
+- Auto-start watcher - polls Google Doc and starts bot automatically when system is turned ON
 
 ### Bot Management
 - Multi-user access control (admin + invited users)
@@ -132,23 +90,21 @@ A fully automated YouTube Shorts factory controlled entirely from Telegram. AI g
 ## Architecture
 
 ```
-Telegram Bot (telegram_automation.py - 4700+ lines)
+Telegram Bot (telegram_automation.py)
     |
-    +-- AI Story Generation (waterfall)
-    |     +-- Primary: TrexoCLI / Claude Code / Codex (auto-detected)
-    |     +-- Fallback: Ollama Cloud API (Gemma 4)
+    +-- AI Story Generation
+    |     +-- Ollama Cloud API (Gemma 4)
     |     +-- Web Search: DuckDuckGo (trending stories + SEO keywords)
     |
     +-- Voice Generation (voice_generator.py)
-    |     +-- Primary: ElevenLabs (multi-key waterfall, mood-based voice)
-    |     +-- Fallback: Edge TTS (Microsoft Emma Neural)
+    |     +-- Edge TTS (Microsoft Emma Neural) - free, unlimited
     |     +-- Output: MP3 + word-level SRT
     |
     +-- Video Pipeline (pipeline.py)
     |     +-- Clip sequencing (user clips + default clips, shuffled)
     |     +-- ASS subtitles (word-by-word, 6 random color styles)
-    |     +-- BGM mixing (mood-based, 15s delayed fade-in)
-    |     +-- Subscribe overlay (chromakey green screen)
+    |     +-- BGM mixing (mood-based, instant start from track midpoint)
+    |     +-- Subscribe overlay (chromakey green screen, triple-safe rendering)
     |     +-- Effects: vignette, color enhance, unsharp mask
     |     +-- GPU (NVENC) with CPU (libx264) fallback
     |
@@ -160,13 +116,13 @@ Telegram Bot (telegram_automation.py - 4700+ lines)
     +-- Post-Upload PRO Features (all automatic)
     |     +-- Multilingual captions (5 languages)
     |     +-- Playlist management
-    |     +-- Pinned comment (deferred until public)
+    |     +-- Pinned comment (duplicate-safe across systems)
     |     +-- Auto-reply comments (60 min window)
     |     +-- A/B title testing (48h check)
-    |     +-- AI thumbnail + upload
     |
     +-- Multi-System Lock + Sync
           +-- Google Doc ON/OFF switch (5s polling)
+          +-- Auto-start watcher (30s polling, starts bot when ON)
           +-- Google Drive data sync (10s interval)
           +-- Auto-download on startup, auto-upload on change
           +-- Instant shutdown when turned OFF via doc
@@ -441,48 +397,11 @@ print(f'Connected to: {ch[\"items\"][0][\"snippet\"][\"title\"]}')
 
 ---
 
-### Step 10: Set Up ElevenLabs Voice (Optional but Recommended)
-
-ElevenLabs gives human-quality voice instead of robotic Edge TTS. Free tier = 10,000 characters/month per account. With 4 videos/day (~750 chars each), you need about 90,000-100,000 chars/month.
-
-**Minimum accounts needed: 10** (10 x 10,000 = 100,000 chars/month = ~130 videos)
-
-#### How to Set Up
-
-1. Create 10+ ElevenLabs accounts at [elevenlabs.io](https://elevenlabs.io)
-   - Use Gmail aliases: `you+el1@gmail.com`, `you+el2@gmail.com`, etc.
-2. For each account: Profile (bottom-left) -> API Keys -> Create -> Copy key
-3. Start the bot and add keys via Telegram:
-
-```
-/add_voice_key sk_abc123...
-/add_voice_key sk_def456...
-(repeat for all keys)
-```
-
-The bot validates each key automatically and activates ElevenLabs as the voice engine. Keys rotate automatically - when one runs out of quota, the next one is used. If all keys are exhausted, Edge TTS kicks in as fallback.
-
-#### Voice Management Commands
-
-| Command | What It Does |
-|---------|-------------|
-| `/add_voice_key <key>` | Add an ElevenLabs API key (auto-validates) |
-| `/voice_keys` | List all saved keys |
-| `/remove_voice_key <N>` | Remove key by index number |
-| `/voice_api_status` | Live check - hits each key, shows chars used/remaining, renew date |
-| `/voice elevenlabs` | Switch to ElevenLabs voice |
-| `/voice edge` | Switch to Edge TTS voice |
-| `/voice_id <id>` | Change ElevenLabs voice ID |
-
-The bot automatically selects different voices based on story mood - no manual voice switching needed.
-
----
-
-### Step 11: Multi-System Instance Lock + Data Sync (Optional)
+### Step 10: Multi-System Instance Lock + Data Sync (Optional)
 
 Run the bot on multiple systems (home PC, office PC, laptop) without conflicts. A shared Google Doc acts as a live switch - only one system runs at a time, and data syncs automatically via Google Drive.
 
-#### 11a: Configure Systems in `.env`
+#### 10a: Configure Systems in `.env`
 
 Edit `assets/channel/.env` (copy from `.env.example`):
 
@@ -504,7 +423,7 @@ system_OFFICE=10.0.0.50,10.0.0.51
 
 You can add as many systems as you want. The bot detects which system it's running on by matching local IPs.
 
-#### 11b: Set Up the Google Doc
+#### 10b: Set Up the Google Doc
 
 Create a Google Doc and share it with **"Anyone with the link can view"**. Write one line per system:
 
@@ -515,14 +434,14 @@ OFFICE=OFF
 
 To switch systems: change `HOME=OFF` and `OFFICE=ON` in the doc. The running bot detects the change within 5 seconds, sends a Telegram message "Shutting down from HOME", and exits. Then start the bot on the other system.
 
-#### 11c: Enable Google Drive API
+#### 10c: Enable Google Drive API
 
 1. Go to [Google Cloud Console API Library](https://console.cloud.google.com/apis/library)
 2. Select the same project used for YouTube API
 3. Search **"Google Drive API"** → Click **Enable**
 4. That's it — the same OAuth credentials (`yt_client_secret_1.json`) work for Drive too
 
-#### 11d: Authorize Google Drive (One-Time Per System)
+#### 10d: Authorize Google Drive (One-Time Per System)
 
 1. Start the bot on the system
 2. Send `/auth_drive` in Telegram
@@ -535,7 +454,7 @@ After authorization, the bot:
 - **Every 10 seconds**: checks for changed files and uploads only what changed
 - **On shutdown**: does a final forced sync to Drive
 
-#### 11e: Switching Between Systems
+#### 10e: Switching Between Systems
 
 ```
 1. Change Google Doc: HOME=OFF, OFFICE=ON
@@ -544,7 +463,7 @@ After authorization, the bot:
 4. All story history, upload schedule, pending jobs carry over seamlessly
 ```
 
-### Step 12: Run the Bot
+### Step 11: Run the Bot
 
 **Option A: Batch file (Windows)**
 ```bash
@@ -565,7 +484,7 @@ The bot sends you a startup message on Telegram with status info. If instance lo
 
 ---
 
-### Step 13: Auto-Start on System Boot (Windows Task Scheduler)
+### Step 12: Auto-Start on System Boot (Windows Task Scheduler)
 
 So the bot starts automatically when your PC turns on:
 
@@ -659,16 +578,10 @@ Or use your own story: `/story <paste your script>` -> `/ok` -> continue from `/
 | `/remove_user <id>` | Remove user |
 | `/view_users` | List all allowed users |
 
-#### Voice (ElevenLabs)
+#### Voice
 | Command | What It Does |
 |---------|-------------|
-| `/add_voice_key <key>` | Add ElevenLabs API key |
-| `/voice_keys` | List all keys |
-| `/remove_voice_key <N>` | Remove key by index |
-| `/voice_api_status` | Live credit/quota check per key |
-| `/voice elevenlabs` | Switch to ElevenLabs |
-| `/voice edge` | Switch to Edge TTS |
-| `/voice_id <id>` | Change voice ID |
+| `/voice` | Show current voice engine info |
 
 ---
 
@@ -710,7 +623,7 @@ ToldByNova/
 +-- scripts/
 |   +-- telegram_automation.py   # Main bot (5100+ lines)
 |   +-- pipeline.py              # Video build pipeline (FFmpeg)
-|   +-- voice_generator.py       # ElevenLabs + Edge TTS voice
+|   +-- voice_generator.py       # Edge TTS voice engine
 |   +-- bot_service.py           # Auto-restart service wrapper
 |   +-- upload_multilang_captions.py  # Batch caption uploader
 +-- assets/
@@ -824,19 +737,6 @@ This exact system runs the bot 24/7 producing 4 videos/day with zero issues. FFm
 | `/remove_user <telegram_id>` | Revoke access from a user. | To remove someone's access |
 | `/view_users` | List all authorized users with names and IDs. | To see who has access |
 
-### ElevenLabs Voice Management
-
-| Command | Description | When to Use |
-|---------|-------------|-------------|
-| `/add_voice_key <key>` | Add an ElevenLabs API key. Auto-validates by hitting the API, shows account info, activates ElevenLabs engine. | When setting up voice accounts |
-| `/voice_keys` | List all saved keys with index numbers and labels. | To see your keys |
-| `/remove_voice_key <N>` | Remove a key by its index number (shown in `/voice_keys`). | When a key expires or you want to remove it |
-| `/voice_api_status` | **Live real-time check** - hits every key's API, shows characters used/remaining, renewal date, progress bar, and estimated videos remaining per key. | To monitor quota usage |
-| `/voice elevenlabs` | Switch voice engine to ElevenLabs (human-quality). | To activate ElevenLabs |
-| `/voice edge` | Switch voice engine to Edge TTS (robotic but free and unlimited). | To switch back to free voice |
-| `/voice` | Show current voice engine and settings. | To check active voice |
-| `/voice_id <id>` | Change the ElevenLabs voice ID (get from elevenlabs.io voice settings). | To use a different voice |
-
 ### Multi-System Lock + Sync
 
 | Command | Description | When to Use |
@@ -857,8 +757,7 @@ This exact system runs the bot 24/7 producing 4 videos/day with zero issues. FFm
 | `No clips found` | Add at least 1 clip to `assets/clips_default/` |
 | `credentials.json not found` | Download from Google Cloud Console (Step 9d) |
 | YouTube upload 403 | OAuth test user expired. Re-authorize (Step 9e) |
-| ElevenLabs 429 error | Key quota exhausted. Bot auto-tries next key |
-| All ElevenLabs keys exhausted | Bot auto-falls back to Edge TTS. Add more accounts next month |
+| Video freezes at 3-4 seconds | Subscribe overlay issue - update to latest pipeline.py |
 | Duplicate bot messages | Kill all Python processes and restart bot once |
 | Video too long | Use `/duration 35` or `/duration auto` for 33-38s |
 | Story not USA-focused | AI prompt is pre-configured for USA. Custom stories via `/story` should be USA-relatable |
