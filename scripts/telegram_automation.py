@@ -1070,7 +1070,7 @@ def _slot_reminder_text(slot, upload_by, countdown_str, secs_left, slot_date="")
     return (
         f"{header}\n\n"
         f"{date_line}"
-        f"Slot: <b>{slot[0]} IST</b> ({slot[1]})\n"
+        f"Slot: <b>{slot[1]}</b> / {slot[0]} IST\n"
         f"Upload by: <b>{upload_by.strftime('%I:%M %p')} IST</b>\n\n"
         f"{bar}\n"
         f"<code>  {countdown_str}  </code>\n\n"
