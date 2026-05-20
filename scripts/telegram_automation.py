@@ -57,10 +57,10 @@ MAX_DURATION = 180
 # Sources: SocialPilot (301K vids), Buffer (1.8M vids), IQFluence (325 campaigns),
 # Sprout Social, HopperHQ — upload 2-3 hrs before peak for algorithm indexing
 UPLOAD_SLOTS_IST = [
-    ("11:30 PM", "02:00 PM EDT"),   # afternoon
-    ("02:30 AM", "05:00 PM EDT"),   # pre-evening — algorithm indexes before 7 PM surge
-    ("04:30 AM", "07:00 PM EDT"),   # evening prime — peak Shorts feed + mobile scrolling
-    ("06:30 AM", "09:00 PM EDT"),   # late evening scroll — post-dinner relaxation peak
+    ("08:30 PM", "11:00 AM EDT"),   # USA late morning — lunchtime scroll
+    ("11:30 PM", "02:00 PM EDT"),   # USA afternoon — peak daytime engagement
+    ("02:30 AM", "05:00 PM EDT"),   # USA pre-evening — algorithm indexes before 7 PM surge
+    ("04:30 AM", "07:00 PM EDT"),   # USA evening prime — peak Shorts feed + mobile scrolling
 ]
 
 
