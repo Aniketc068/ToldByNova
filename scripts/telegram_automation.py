@@ -346,10 +346,6 @@ def _check_instance_lock():
         return True
     elif my_status == "OFF":
         print(f"[LOCK] Doc says {_lock_system_name}: OFF — NOT starting")
-        try:
-            _send_admin_msg(f"<b>Instance Lock: NOT starting</b>\n{_lock_system_name} is OFF in control doc.")
-        except:
-            pass
         return False
     else:
         print(f"[LOCK] No entry for {_lock_system_name} in doc — starting without lock")
