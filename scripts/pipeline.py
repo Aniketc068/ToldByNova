@@ -9,7 +9,9 @@ ASSETS = f"{PROJECT}/assets"
 SFX_DIR = f"{ASSETS}/sfx"
 BGM_DIR = f"{ASSETS}/bgm"
 DEFAULT_CLIPS_DIR = f"{ASSETS}/clips_default"
-SUBSCRIBE_VID = f"{ASSETS}/subscribe.mp4"
+_NEW_SUB = f"{ASSETS}/new_subscribe.mp4"
+_OLD_SUB = f"{ASSETS}/subscribe.mp4"
+SUBSCRIBE_VID = _NEW_SUB if os.path.exists(_NEW_SUB) else _OLD_SUB
 W, H, FPS = 1080, 1920, 30
 SEG_DUR = 2.0
 
@@ -177,11 +179,22 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     n_ev = make_ass(words, ass_f, adur, landscape=landscape)
     print(f"ASS: {n_ev} events")
 
-    # Calculate subscribe overlay time — when narrator says "subscribe"
+    # Calculate subscribe overlay time — starts at CTA (like/comment/subscribe) until end
     sub_word_time = adur * 0.55
     for ss, se, txt in words:
+        wl = txt.lower().strip('.,!?')
+        if wl in ('like', 'yes', 'no', 'type', 'was', 'would', 'who', 'am'):
+            found_cta = False
+            for ss2, se2, txt2 in words:
+                if ss2 >= ss and 'subscribe' in txt2.lower():
+                    found_cta = True
+                    break
+            if found_cta:
+                sub_word_time = max(ss - 0.5, 0)
+                break
+    for ss, se, txt in words:
         if 'subscribe' in txt.lower():
-            sub_word_time = ss - 1.0
+            sub_word_time = min(sub_word_time, ss - 1.0)
             break
     _has_sub_vid = os.path.exists(SUBSCRIBE_VID)
     sub_times = []
@@ -341,15 +354,14 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
 
     # BGM tracks are shorter (~1-2min), so we loop them
     bgm_dur = dur(music_file)
+    bgm_start = bgm_dur / 2
     loops_needed = int(adur / bgm_dur) + 2
 
-    input_args = ['-i', voice_mp3, '-stream_loop', str(loops_needed), '-i', music_file]
+    input_args = ['-i', voice_mp3, '-ss', str(bgm_start), '-stream_loop', str(loops_needed), '-i', music_file]
     input_idx = 2
 
-    BGM_DELAY_MS = 15000
     audio_filter = (
-        f"[1:a]atrim=0:{adur+2},asetpts=PTS-STARTPTS,volume=0.18,"
-        f"adelay={BGM_DELAY_MS}|{BGM_DELAY_MS},afade=t=in:st=15:d=3[m];"
+        f"[1:a]atrim=0:{adur+2},asetpts=PTS-STARTPTS,volume=0.18[m];"
         f"[0:a]volume=1.8[v];"
         f"[v][m]amix=inputs=2:duration=first:dropout_transition=2[base];"
     )
@@ -404,6 +416,8 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     base_vf_parts.append(f"ass='{ass_basename}'")
     main_vf = ",".join(base_vf_parts)
 
+    sub_dur = dur(SUBSCRIBE_VID) if has_subscribe else 0
+
     def _build_overlay_cmd(encoder_args):
         inputs = ['-i', bg]
         fc_parts = [f"[0:v]{main_vf}[main]"]
@@ -411,20 +425,20 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
         prev_label = "main"
 
         if has_subscribe:
-            for si, st in enumerate(sub_times):
-                inputs.extend(['-itsoffset', str(st), '-i', SUBSCRIBE_VID])
-                sub_label = f"sub{si}"
-                after_label = f"after_sub{si}"
-                fc_parts.append(
-                    f"[{overlay_idx}:v]chromakey=0x00af3f:0.12:0.02,"
-                    f"{sub_scale}[{sub_label}]"
-                )
-                y_pos = "550" if landscape else "(H/2)"
-                fc_parts.append(
-                    f"[{prev_label}][{sub_label}]overlay=(W-w)/2:{y_pos}:eof_action=pass[{after_label}]"
-                )
-                prev_label = after_label
-                overlay_idx += 1
+            inputs.extend(['-stream_loop', '-1', '-i', SUBSCRIBE_VID])
+            _is_new_sub = os.path.exists(_NEW_SUB) and SUBSCRIBE_VID == _NEW_SUB
+            chroma = "0x00FF00:0.25:0.08" if _is_new_sub else "0x00af3f:0.12:0.02"
+            sub_label = "subraw"
+            fc_parts.append(
+                f"[{overlay_idx}:v]chromakey={chroma},{sub_scale}[{sub_label}]"
+            )
+            y_pos = "550" if landscape else "(H*3/5)"
+            enable_expr = " + ".join(f"between(t,{st},{adur})" for st in sub_times)
+            fc_parts.append(
+                f"[{prev_label}][{sub_label}]overlay=(W-w)/2:{y_pos}:enable='{enable_expr}':eof_action=pass[after_sub]"
+            )
+            prev_label = "after_sub"
+            overlay_idx += 1
 
         audio_idx = overlay_idx
         inputs.extend(['-i', audio])
@@ -457,6 +471,8 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     # CPU fallback
     if r.returncode != 0:
         print("GPU failed, trying CPU...")
+        try: os.remove(output_path)
+        except: pass
         if has_overlays:
             r = run(_build_overlay_cmd(cpu_enc), 600)
         else:
