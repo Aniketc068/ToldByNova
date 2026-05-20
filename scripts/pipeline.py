@@ -9,7 +9,9 @@ ASSETS = f"{PROJECT}/assets"
 SFX_DIR = f"{ASSETS}/sfx"
 BGM_DIR = f"{ASSETS}/bgm"
 DEFAULT_CLIPS_DIR = f"{ASSETS}/clips_default"
-SUBSCRIBE_VID = f"{ASSETS}/subscribe.mp4"
+_NEW_SUB = f"{ASSETS}/new_subscribe.mp4"
+_OLD_SUB = f"{ASSETS}/subscribe.mp4"
+SUBSCRIBE_VID = _NEW_SUB if os.path.exists(_NEW_SUB) else _OLD_SUB
 W, H, FPS = 1080, 1920, 30
 SEG_DUR = 2.0
 
@@ -177,11 +179,22 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     n_ev = make_ass(words, ass_f, adur, landscape=landscape)
     print(f"ASS: {n_ev} events")
 
-    # Calculate subscribe overlay time — when narrator says "subscribe"
+    # Calculate subscribe overlay time — starts at CTA (like/comment/subscribe) until end
     sub_word_time = adur * 0.55
     for ss, se, txt in words:
+        wl = txt.lower().strip('.,!?')
+        if wl in ('like', 'yes', 'no', 'type', 'was', 'would', 'who', 'am'):
+            found_cta = False
+            for ss2, se2, txt2 in words:
+                if ss2 >= ss and 'subscribe' in txt2.lower():
+                    found_cta = True
+                    break
+            if found_cta:
+                sub_word_time = max(ss - 0.5, 0)
+                break
+    for ss, se, txt in words:
         if 'subscribe' in txt.lower():
-            sub_word_time = ss - 1.0
+            sub_word_time = min(sub_word_time, ss - 1.0)
             break
     _has_sub_vid = os.path.exists(SUBSCRIBE_VID)
     sub_times = []
@@ -416,9 +429,11 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
                 inputs.extend(['-itsoffset', str(st), '-stream_loop', '-1', '-i', SUBSCRIBE_VID])
                 sub_label = f"sub{si}"
                 after_label = f"after_sub{si}"
-                et = st + sub_dur
+                et = adur
+                _is_new_sub = os.path.exists(_NEW_SUB) and SUBSCRIBE_VID == _NEW_SUB
+                chroma = "0x00FF00:0.25:0.08" if _is_new_sub else "0x00af3f:0.12:0.02"
                 fc_parts.append(
-                    f"[{overlay_idx}:v]chromakey=0x00af3f:0.12:0.02,"
+                    f"[{overlay_idx}:v]chromakey={chroma},"
                     f"{sub_scale}[{sub_label}]"
                 )
                 y_pos = "550" if landscape else "(H/2)"
