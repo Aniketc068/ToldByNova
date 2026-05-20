@@ -1358,18 +1358,28 @@ def search_viral_stories():
         return ""
 
     reddit_queries = [
-        "reddit AITA viral story",
-        "reddit tifu best story",
-        "reddit ProRevenge viral",
-        "reddit MaliciousCompliance best story",
-        "reddit AmItheAsshole update story",
+        "reddit AITA viral story this week",
+        "reddit ProRevenge best story this month",
+        "reddit MaliciousCompliance viral story",
+        "reddit NuclearRevenge best revenge story",
+        "reddit EntitledPeople viral Karen story",
+        "reddit ChoosingBeggars viral story",
+        "reddit PettyRevenge satisfying karma",
+        "reddit relationship_advice cheating exposed",
+        "reddit AmItheAsshole controversial update",
+        "reddit legaladvice insane lawsuit",
     ]
     news_queries = [
-        "viral news story USA court case",
-        "unbelievable true story USA lawsuit",
-        "caught on camera USA viral news",
-        "justice served news story USA",
-        "shocking true crime story USA",
+        "viral news story USA caught on camera today",
+        "shocking lawsuit USA news this week",
+        "Karen caught on camera viral USA",
+        "neighbor war viral news USA",
+        "cheating exposed viral story USA",
+        "scammer caught viral USA news",
+        "entitled person destroyed viral video",
+        "instant karma caught on camera USA",
+        "court case shocking verdict USA this week",
+        "trending drama story USA today",
     ]
 
     stories_text = []
@@ -1650,12 +1660,17 @@ def normalize_story(s):
         else:
             ending_part = _rnd.choice(_open_endings)
 
-        # Ensure CTA always includes subscribe
+        _viral_ctas = [
+            "Was this justified? Type YES or NO. Like and subscribe for more.",
+            "Would you have done the same? Comment below. Like if you agree.",
+            "Who was wrong here? Drop your answer. Hit like and subscribe.",
+            "Am I wrong for this? Tell me in the comments. Like and subscribe.",
+        ]
         has_subscribe = any('subscribe' in c.lower() for c in cta_parts)
         if not cta_parts:
-            cta_parts = ["What would you have done? Drop it in the comments. Subscribe for more stories like this."]
+            cta_parts = [random.choice(_viral_ctas)]
         elif not has_subscribe:
-            cta_parts.append("Subscribe for more stories like this")
+            cta_parts.append("Like and subscribe for more stories like this.")
 
         # Rebuild: Story → CTA → Loop cliffhanger
         script = ". ".join(story_parts).rstrip(". ") + ". "
@@ -1773,12 +1788,20 @@ def generate_stories():
     used = get_used_titles()
     used_list = "\n".join(f"- {t}" for t in used[-50:]) if used else "None yet"
 
-    dur = bot.max_duration if bot.max_duration > 0 else random.randint(33, 38)
+    dur = bot.max_duration if bot.max_duration > 0 else random.randint(28, 33)
     words_min = int(dur * 2.5)
     words_max = int(dur * 3)
     print(f"Story mode: SHORT ONLY | short={dur}s ({words_min}-{words_max}w)")
 
-    short_cta = "What would you have done? Drop it in the comments. Subscribe for more stories like this."
+    cta_options = [
+        "Was she wrong? Type YES or NO. Like and subscribe for more.",
+        "Would you have done the same? Comment below. Like if you agree.",
+        "Who was wrong here? Drop your answer. Hit like and subscribe.",
+        "Type 1 if she was right, 2 if he was. Like this and subscribe.",
+        "Am I wrong for this? Tell me in the comments. Like and subscribe.",
+        "What would you have done? Comment NOW. Double tap and subscribe.",
+    ]
+    short_cta = random.choice(cta_options)
     json_format = f"""{{"stories":[{{"title":"Short searchable title with keyword","hook":"Shocking first sentence under 10 words","script":"MANDATORY complete SHORT narration {words_min}-{words_max} words ending with {short_cta}","dramatic_words":["word1","word2","word3","word4","word5"],"mood":"dramatic","clip_suggestions":["search term 1","search term 2","search term 3","search term 4","search term 5"],"short_seo":{{"yt_title":"Viral YT Shorts title under 50 chars","description":"#shorts #storytime #redditstories + hook + summary + Follow @ToldByNova","tags":"shorts,storytime,viral,reddit stories,true story,justice,revenge,karma,real stories,plus 10 story-specific tags","category":"Entertainment"}}}}]}}"""
 
     base_rules = f"""Generate SHORT script only.
@@ -1805,8 +1828,12 @@ THE STORY MUST HAVE: a villain, a victim, conflict, and SATISFYING REVENGE/KARMA
 
 RULES FOR SHORT SCRIPT (field: "script"):
 - Target: {dur} seconds. Script MUST be {words_min}-{words_max} words (voice reads at ~2.7 words/sec).
-- HOOK (first sentence): A shocking statement under 10 words that stops the scroll.
+- FIRST WORD RULE: The very first word must be emotionally charged or shocking. Start with: "She", "He", "My", "They" + immediate action/accusation. NEVER start with "So", "Well", "Today", "I want to", "Let me tell you". The first 3 words must make someone STOP scrolling.
+  GREAT HOOKS: "She FAKED her own kidnapping." / "My boss STOLE my promotion." / "He got caught CHEATING at his own wedding."
+  BAD HOOKS: "So this happened to me..." / "I want to tell you about..." / "Today I'm going to share..."
+- HOOK (first sentence): A shocking accusation or revelation under 10 words that stops the scroll.
 - Structure: Hook → Escalation → SECOND HOOK → Twist → CTA → Loop Cliffhanger (LAST LINE)
+- CONTROVERSY RULE: The story MUST make viewers pick a side. Include a morally gray moment where the "hero" does something questionable. Viewers should DEBATE in comments whether they were right or wrong.
 - SECOND HOOK (at ~14-15 second mark, around word 38-42 in script):
   YouTube algorithm checks retention at 15s — this is the "sustained distribution gate". You MUST insert a SURPRISE sentence here that re-hooks the viewer.
   Examples: "But here's what nobody expected." / "That's when she found the hidden camera." / "What he said next shocked everyone."
@@ -1994,10 +2021,18 @@ NOTE: You cannot search the web. Use the stories and trending topics provided ab
 
 def refine_story(raw_text):
     """Refine a user-provided story into a YouTube Shorts narration script."""
-    dur = bot.max_duration if bot.max_duration > 0 else random.randint(33, 38)
+    dur = bot.max_duration if bot.max_duration > 0 else random.randint(28, 33)
     words_min = int(dur * 2.5)
     words_max = int(dur * 3)
-    short_cta = "What would you have done? Drop it in the comments. Subscribe for more stories like this."
+    cta_options = [
+        "Was she wrong? Type YES or NO. Like and subscribe for more.",
+        "Would you have done the same? Comment below. Like if you agree.",
+        "Who was wrong here? Drop your answer. Hit like and subscribe.",
+        "Type 1 if she was right, 2 if he was. Like this and subscribe.",
+        "Am I wrong for this? Tell me in the comments. Like and subscribe.",
+        "What would you have done? Comment NOW. Double tap and subscribe.",
+    ]
+    short_cta = random.choice(cta_options)
     json_fmt = f"""{{"title":"Short searchable title","script":"Short narration {words_min}-{words_max} words.","dramatic_words":["word1","word2","word3"],"mood":"dramatic","clip_suggestions":["term1","term2","term3","term4","term5"]}}"""
 
     prompt = f"""TASK: Rewrite this raw story as a YouTube Shorts narration script. Output ONLY raw JSON, no markdown, no code blocks.
@@ -2165,7 +2200,7 @@ def generate_seo(title, script):
 {desc_rule}
 3. tags = a comma-separated string with EXACTLY 20 tags. NEVER use # symbol in tags — just plain words. First tag must be "shorts". Mix: shorts, storytime, viral, reddit stories, true story, justice served, satisfying, revenge, real stories, story time, plus 10 story-specific keywords relevant to USA viewers. Keep total under 480 characters.
 4. category = Entertainment
-5. pinned_comment = a single engaging question related to the story that encourages viewers to comment. Under 100 characters. Example: "Would you have done the same thing? Comment below!"
+5. pinned_comment = a DEBATE question that forces viewers to pick a side. Under 100 characters. Must use "Type YES/NO", "Comment 1 or 2", "Was she right?", or "Am I wrong?" format. Examples: "Was she wrong for exposing him? Type YES or NO" / "Type 1 if he deserved it, 2 if she went too far"
 
 STRICT RULES:
 - Tags must NOT contain # symbol (write "shorts" not "#shorts")
@@ -2841,11 +2876,14 @@ def _auto_reply_comments(video_id, duration_minutes=60, max_replies=5):
     print(f"[COMMENTS] Auto-reply started for {video_id} ({duration_minutes}min, max {max_replies})")
 
     reply_templates = [
-        "Thank you so much for watching! Your support means everything 🙏",
-        "So glad you enjoyed this story! More coming soon 💛",
-        "Thanks for sharing your thoughts! What story should we cover next?",
-        "Wow, thank you for this comment! Don't forget to subscribe for daily stories 🔔",
-        "Really appreciate you watching the full video! Stay tuned for more 🎬",
+        "Right?! What would YOU have done though? I need to know 👀",
+        "This one was WILD. But wait till you see tomorrow's story 🔥",
+        "Exactly! But do you think they went too far? Be honest 💭",
+        "You're so right! Like and subscribe if you want part 2 of this 👆",
+        "I couldn't believe it either! Drop a 🔥 if you want more stories like this",
+        "The real question is... was it justified? Tell me below 👇",
+        "Your take is interesting! But what about the other side? 🤔",
+        "Facts! Share this with someone who needs to hear it 📲",
     ]
 
     while time.time() - start < duration_minutes * 60 and reply_count < max_replies:
@@ -3042,7 +3080,7 @@ def _periodic_job_check():
             if is_public:
                 print(f"[JOBS-CHECK] {vid} is public — posting comment now")
                 _remove_job(jid)
-                comment = job.get("comment_text") or "What would you have done in this situation? Comment below!"
+                comment = job.get("comment_text") or "Was this justified? Type YES or NO below!"
                 ok = post_pinned_comment(vid, comment)
                 if ok:
                     _send_admin_msg(f"Pinned comment posted on {vid}")
@@ -3068,12 +3106,12 @@ def _resume_pending_jobs():
             if is_public:
                 print(f"[JOBS] Video {vid} already public — posting comment immediately")
                 _remove_job(jid)
-                comment = job.get("comment_text") or "What would you have done in this situation? Comment below!"
+                comment = job.get("comment_text") or "Was this justified? Type YES or NO below!"
                 ok = post_pinned_comment(vid, comment)
                 if ok:
                     _send_admin_msg(f"Pinned comment posted on {vid}")
             else:
-                fallback_comment = job.get("comment_text") or "What would you have done in this situation? Comment below!"
+                fallback_comment = job.get("comment_text") or "Was this justified? Type YES or NO below!"
                 _active_comment_threads.add(jid)
                 threading.Thread(target=_deferred_post_upload,
                     args=(vid, fallback_comment, job.get("publish_at"), jid),
@@ -4349,7 +4387,7 @@ def handle_message(msg):
                 edit_msg(pro_mid, "⏳ <b>PRO features...</b>\n⏭ Captions skipped\n<code>[ playlist ]</code>")
             if add_to_playlist(vid_id):
                 edit_msg(pro_mid, f"⏳ <b>PRO features...</b>\n✅ Captions\n✅ Playlist\n<code>[ comment ]</code>")
-            scomment = seo.get('pinned_comment', '') or "What would you have done in this situation? Comment below!"
+            scomment = seo.get('pinned_comment', '') or "Was this justified? Type YES or NO below!"
             schedule_post_upload(vid_id, scomment, publish_at=publish_at)
             edit_msg(pro_mid, "⏳ <b>PRO features...</b>\n✅ Captions\n✅ Playlist\n✅ Comment scheduled\n<code>[ A/B test ]</code>")
             start_ab_test(vid_id, seo['yt_title'], bot.current_story,
