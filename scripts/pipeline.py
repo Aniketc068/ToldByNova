@@ -398,9 +398,9 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     # Both overlays appear at same time — when "subscribe" is said
     if has_subscribe:
         if landscape:
-            sub_scale = f"scale=-1:{int(H * 0.4)}:flags=bilinear"
+            sub_scale = f"scale=-1:{int(H * 0.5)}:flags=bilinear"
         else:
-            sub_scale = f"scale={int(W * 0.5)}:-1:flags=bilinear"
+            sub_scale = f"scale={int(W * 0.6)}:-1:flags=bilinear"
         if len(sub_times) > 1:
             print(f"Subscribe (x{len(sub_times)}): {', '.join(f'{t:.0f}s' for t in sub_times)}")
         elif sub_times:
