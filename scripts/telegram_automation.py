@@ -1826,12 +1826,24 @@ ONLY THESE TOPICS (USA viral drama — what people actually watch):
 - HOA revenge, landlord karma, roommate from hell stories
 THE STORY MUST HAVE: a villain, a victim, conflict, and SATISFYING REVENGE/KARMA/JUSTICE ending.
 
+===== STORY UNIQUENESS (MANDATORY — GENERIC STORIES GET 0 VIEWS) =====
+Every story MUST have a BIZARRE/UNUSUAL specific detail that makes it stand out:
+BAD (generic, oversaturated, will flop): "My boss demanded I follow rules" / "My neighbor was rude" / "My coworker stole my idea" / "My landlord was terrible" / "My ex cheated on me"
+GOOD (unique, bizarre, will go viral): "My boss made me count every paperclip — so I counted 47,000" / "My neighbor called the cops because my DOG was too happy" / "She sued Red Bull because it didn't give her wings" / "Karen broke into my house at 3 AM to complain about my lawn"
+THE DIFFERENCE: Generic = been told 1 million times. Bizarre = has ONE specific absurd detail that makes someone say "WAIT WHAT?"
+If your story could be titled "Boss/Neighbor/Ex was bad and got karma" — it is TOO GENERIC. Start over.
+===== END UNIQUENESS RULE =====
+
 RULES FOR SHORT SCRIPT (field: "script"):
 - Target: {dur} seconds. Script MUST be {words_min}-{words_max} words (voice reads at ~2.7 words/sec).
-- FIRST WORD RULE: The very first word must be emotionally charged or shocking. Start with: "She", "He", "My", "They" + immediate action/accusation. NEVER start with "So", "Well", "Today", "I want to", "Let me tell you". The first 3 words must make someone STOP scrolling.
-  GREAT HOOKS: "She FAKED her own kidnapping." / "My boss STOLE my promotion." / "He got caught CHEATING at his own wedding."
-  BAD HOOKS: "So this happened to me..." / "I want to tell you about..." / "Today I'm going to share..."
-- HOOK (first sentence): A shocking accusation or revelation under 10 words that stops the scroll.
+- FIRST WORD RULE (MOST IMPORTANT — THIS DECIDES IF VIDEO GETS 200 OR 2000 VIEWS):
+  The first sentence is heard in 1 second. It MUST contain a SPECIFIC shocking detail.
+  Start with: "She", "He", "My", "They" + immediate SPECIFIC action (not vague).
+  NEVER start with: "So", "Well", "Today", "I want to", "Let me tell you", "This is a story"
+  GREAT HOOKS (specific + shocking): "She faked her own kidnapping for 22 days." / "He sued Red Bull for not giving him wings." / "My neighbor called the cops because my dog was too happy." / "Karen broke into my house at 3 AM over a lawn ornament."
+  BAD HOOKS (vague + generic): "My boss was terrible." / "My neighbor was rude to me." / "Something crazy happened." / "My ex did something unforgivable."
+  THE RULE: First sentence must have a SPECIFIC bizarre detail. "Boss demanded rules" = generic. "Boss made me count 47,000 paperclips" = specific + bizarre.
+- HOOK (first sentence): A shocking accusation with ONE bizarre specific detail, under 10 words.
 - Structure: Hook → Escalation → SECOND HOOK → Twist → CTA → Loop Cliffhanger (LAST LINE)
 - CONTROVERSY RULE: The story MUST make viewers pick a side. Include a morally gray moment where the "hero" does something questionable. Viewers should DEBATE in comments whether they were right or wrong.
 - SECOND HOOK (at ~14-15 second mark, around word 38-42 in script):
@@ -1860,8 +1872,17 @@ RULES FOR SHORT SCRIPT (field: "script"):
   TEST: Read your LAST line → then your hook. Must feel like ONE continuous story.
 - Short punchy sentences. 1 thought per sentence. Natural female narrator voice.
 SEO RULES:
-- short_seo.yt_title: Viral Shorts title under 50 chars, curiosity gap, no emojis. MUST be UNIQUE — never similar to: {used_list}
-- short_seo.description: START with hook sentence (no hashtags at start!), then summary, then "Subscribe to @ToldByNova", then LAST LINE = exactly 3 hashtags (#shorts + 2 story-specific). NEVER start description with a hashtag.
+- short_seo.yt_title: MUST follow these rules:
+  1. Under 50 chars, no emojis, no hashtags
+  2. MUST contain the BIZARRE specific detail (the thing that makes it unique)
+  3. MUST create curiosity gap — viewer needs to click to know what happened
+  4. NEVER reveal the outcome in the title ("Lost Everything", "Got Karma", "Was Destroyed" = BAD)
+  5. NEVER use generic formats: "X Gets Karma" / "X Loses Everything" / "X Was Wrong"
+  BAD TITLES: "Boss Demanded Rules Then Lost Everything" / "Karen Gets What She Deserves" / "Cheater Gets Caught"
+  GOOD TITLES: "He Sued Red Bull Because It Didn't Give Him Wings" / "She Found His Secret Phone" / "Karen's Midnight Raid Backfires"
+  THE TEST: Would someone screenshot this title and send it to a friend? If not, rewrite it.
+  MUST be UNIQUE — never similar to: {used_list}
+- short_seo.description: START with the most shocking sentence from the story (no hashtags at start!), then summary, then "Subscribe to @ToldByNova", then LAST LINE = exactly 3 hashtags (#shorts + 2 story-specific). NEVER start description with a hashtag.
 - short_seo.tags: 20 comma-separated tags starting with "shorts", mix trending + story-specific
 - All category: Entertainment
 
@@ -1874,6 +1895,8 @@ CLIP SUGGESTIONS: 5-6 search keywords matching STORY MOOD (not generic). 2-4 wor
 Channel: "Told By Nova" — female narrator, real viral true stories for USA audience.
 
 IMPORTANT: Search the web for REAL trending viral stories from Reddit (ProRevenge, AITA, MaliciousCompliance, NuclearRevenge, ChoosingBeggars, EntitledPeople), TMZ, court news. Find DRAMA/REVENGE/KARMA stories from last 1-2 months. Base your script on a REAL story — do NOT invent stories.
+
+CRITICAL: The story MUST have a BIZARRE/UNUSUAL angle. Generic "boss was mean" or "neighbor was rude" stories get ZERO views. Find stories with ABSURD specific details — the kind of detail that makes someone say "wait, WHAT?" and share it with friends. Examples: sued over Red Bull wings, broke into house at 3 AM over a lawn, faked kidnapping for attention. If your story sounds like it could happen to anyone — it is TOO BORING. Find the WEIRD ones.
 
 REMINDER: NO math, NO science, NO professors, NO genius stories, NO universities, NO inspirational academic stories. ONLY revenge, karma, drama, cheating, betrayal, court cases, neighbor wars, Karen stories. If your story has anything to do with education or academics — START OVER.
 
