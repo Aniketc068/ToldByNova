@@ -2960,105 +2960,6 @@ def start_auto_reply(video_id):
     print(f"[COMMENTS] Auto-reply thread started for {video_id}")
 
 
-def _generate_alt_titles(title, story_title, script_excerpt):
-    """Generate 2 alternative titles using AI for A/B testing."""
-    prompt = f"""Generate exactly 2 alternative YouTube titles for this video. The current title is: "{title}"
-Story: {story_title}
-Script excerpt: {script_excerpt[:300]}
-
-Rules:
-- Each title under 60 characters
-- Searchable, clickable, different angle from current title
-- Include keywords like "true story", "what happened", "justice" etc.
-- No emojis, no hashtags
-- Output ONLY a JSON array of 2 strings, nothing else.
-Example: ["Title One Here", "Title Two Here"]"""
-    result = claude_run(prompt, timeout=60)
-    if not result:
-        return []
-    try:
-        cleaned = result.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r'^```\w*\n?', '', cleaned)
-            cleaned = re.sub(r'\n?```$', '', cleaned)
-        titles = json.loads(cleaned.strip())
-        if isinstance(titles, list) and len(titles) >= 2:
-            return [t.strip()[:60] for t in titles[:2]]
-    except:
-        pass
-    return []
-
-
-def _ab_test_title(video_id, original_title, alt_titles, job_id=None, check_after=None):
-    """After 48 hours, check which title idea performs best. Runs in background."""
-    import datetime as _dt
-    try:
-        if check_after:
-            try:
-                check_time = _dt.datetime.fromisoformat(check_after.replace("Z", "+00:00"))
-                now = _dt.datetime.now(_dt.timezone.utc)
-                wait_secs = (check_time - now).total_seconds()
-                if wait_secs > 0:
-                    print(f"[AB-TEST] Waiting {wait_secs/3600:.1f}h before checking {video_id}")
-                    time.sleep(wait_secs)
-            except:
-                time.sleep(48 * 3600)
-        else:
-            time.sleep(48 * 3600)
-
-        youtube = _get_youtube_client()
-        resp = youtube.videos().list(part="statistics", id=video_id).execute()
-        if not resp.get("items"):
-            print(f"[AB-TEST] Video {video_id} not found")
-            return
-        stats = resp["items"][0]["statistics"]
-        views = int(stats.get("viewCount", 0))
-
-        if views < 50:
-            print(f"[AB-TEST] Only {views} views after 48h — trying title swap")
-            new_title = alt_titles[0] if alt_titles else None
-            if new_title and new_title != original_title:
-                youtube.videos().update(
-                    part="snippet",
-                    body={
-                        "id": video_id,
-                        "snippet": {
-                            "title": new_title,
-                            "categoryId": "24"
-                        }
-                    }
-                ).execute()
-                print(f"[AB-TEST] Title changed: '{original_title}' -> '{new_title}'")
-            else:
-                print(f"[AB-TEST] No alternative title available")
-        else:
-            print(f"[AB-TEST] {views} views — title performing OK, keeping: '{original_title}'")
-    except Exception as e:
-        print(f"[AB-TEST] Failed for {video_id}: {e}")
-    finally:
-        if job_id:
-            _remove_job(job_id)
-
-
-def start_ab_test(video_id, original_title, story_title, script_excerpt):
-    """Generate alt titles, save persistent job, and schedule A/B test in background."""
-    import datetime as _dt
-    alt_titles = _generate_alt_titles(original_title, story_title, script_excerpt)
-    if alt_titles:
-        job_id = f"ab_test_{video_id}"
-        check_after = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=48)).isoformat()
-        _save_job({
-            "id": job_id, "type": "ab_test",
-            "video_id": video_id, "original_title": original_title,
-            "alt_titles": alt_titles, "check_after": check_after,
-            "created": _dt.datetime.now(_dt.timezone.utc).isoformat()
-        })
-        print(f"[AB-TEST] Alt titles for {video_id}: {alt_titles}")
-        threading.Thread(target=_ab_test_title,
-                        args=(video_id, original_title, alt_titles, job_id, check_after),
-                        daemon=True).start()
-    else:
-        print(f"[AB-TEST] Could not generate alt titles for {video_id}")
 
 
 def _check_video_is_public(video_id):
@@ -3141,10 +3042,8 @@ def _resume_pending_jobs():
                     daemon=False).start()
                 print(f"[JOBS] Resumed comment+reply for {vid} (waiting for public)")
         elif jtype == "ab_test":
-            threading.Thread(target=_ab_test_title,
-                args=(vid, job.get("original_title"), job.get("alt_titles"), jid, job.get("check_after")),
-                daemon=False).start()
-            print(f"[JOBS] Resumed A/B test for {vid}")
+            _remove_job(jid)
+            print(f"[JOBS] Removed old A/B test job for {vid}")
         else:
             print(f"[JOBS] Unknown job type: {jtype}, removing")
             _remove_job(jid)
@@ -4412,15 +4311,12 @@ def handle_message(msg):
                 edit_msg(pro_mid, f"⏳ <b>PRO features...</b>\n✅ Captions\n✅ Playlist\n<code>[ comment ]</code>")
             scomment = seo.get('pinned_comment', '') or "Was this justified? Type YES or NO below!"
             schedule_post_upload(vid_id, scomment, publish_at=publish_at)
-            edit_msg(pro_mid, "⏳ <b>PRO features...</b>\n✅ Captions\n✅ Playlist\n✅ Comment scheduled\n<code>[ A/B test ]</code>")
-            start_ab_test(vid_id, seo['yt_title'], bot.current_story,
-                          bot.current_script[:300] if bot.current_script else "")
-            edit_msg(pro_mid, "✅ <b>All PRO features done!</b>\n✅ Captions\n✅ Playlist\n✅ Comment\n✅ A/B test")
+            edit_msg(pro_mid, "✅ <b>All PRO features done!</b>\n✅ Captions\n✅ Playlist\n✅ Comment scheduled")
 
             bot.state = "UPLOADED"
             bot.save()
 
-            pro_status = "multilang captions, comment, auto-reply, playlists, A/B test"
+            pro_status = "multilang captions, comment, auto-reply, playlists"
             summary = (
                 f"<b>Scheduled on YouTube!</b>\n"
                 f"Short: {result}\n"
