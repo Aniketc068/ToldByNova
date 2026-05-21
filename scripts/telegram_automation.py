@@ -1833,12 +1833,20 @@ If your story could be titled "Boss/Neighbor/Ex was bad and got karma" — it is
 
 RULES FOR SHORT SCRIPT (field: "script"):
 - Target: {dur} seconds. Script MUST be {words_min}-{words_max} words (voice reads at ~2.7 words/sec).
-- FIRST WORD RULE (MOST IMPORTANT — THIS DECIDES IF VIDEO GETS 200 OR 2000 VIEWS):
-  The first sentence is heard in 1 second. It MUST contain a SPECIFIC shocking detail.
-  Start with: "She", "He", "My", "They" + immediate SPECIFIC action (not vague).
-  NEVER start with: "So", "Well", "Today", "I want to", "Let me tell you", "This is a story"
-  GREAT HOOKS (specific + shocking): "She faked her own kidnapping for 22 days." / "He sued Red Bull for not giving him wings." / "My neighbor called the cops because my dog was too happy." / "Karen broke into my house at 3 AM over a lawn ornament."
-  BAD HOOKS (vague + generic): "My boss was terrible." / "My neighbor was rude to me." / "Something crazy happened." / "My ex did something unforgivable."
+- RETENTION CRISIS: 83% of viewers SWIPE AWAY in first 6 seconds. The first 3 seconds decide EVERYTHING.
+- FIRST 3 SECONDS RULE (THIS DECIDES IF VIDEO GETS 200 OR 200,000 VIEWS):
+  Analytics show avg view = 5.9 seconds. We MUST make first 3 seconds impossible to swipe away.
+  SENTENCE 1 (heard in 1 second): MUST contain a NUMBER or SPECIFIC bizarre detail. Numbers stop scrolling.
+  "She faked her own kidnapping for 22 days." (NUMBER + bizarre = unstoppable)
+  "He sued Red Bull for 13 million dollars." (NUMBER + absurd = must watch)
+  "My neighbor called the cops 47 times over a fence." (NUMBER + crazy = hooked)
+  SENTENCE 2 (heard in 3 seconds): MUST create an unanswered question. Viewer NEEDS to keep watching.
+  "She faked her own kidnapping for 22 days. The police found something WORSE."
+  "He sued Red Bull for 13 million dollars. And he actually WON."
+  Start with: "She", "He", "My", "They" + immediate SPECIFIC action with a NUMBER.
+  NEVER start with: "So", "Well", "Today", "I want to", "Let me tell you", "This is a story", "Once upon a time"
+  BAD HOOKS (vague = instant swipe): "My boss was terrible." / "My neighbor was rude." / "Something crazy happened."
+  INCLUDE A NUMBER IN FIRST SENTENCE WHENEVER POSSIBLE. Numbers like 47, 22, 13 million, 3 AM, etc. create specificity that stops the scroll.
   THE RULE: First sentence must have a SPECIFIC bizarre detail. "Boss demanded rules" = generic. "Boss made me count 47,000 paperclips" = specific + bizarre.
 - HOOK (first sentence): A shocking accusation with ONE bizarre specific detail, under 10 words.
 - Structure: Hook → Escalation → SECOND HOOK → MID-CTA → Twist → END-CTA → Loop Cliffhanger

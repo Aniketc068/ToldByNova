@@ -179,23 +179,7 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
     n_ev = make_ass(words, ass_f, adur, landscape=landscape)
     print(f"ASS: {n_ev} events")
 
-    # Calculate subscribe overlay time — starts at CTA (like/comment/subscribe) until end
-    sub_word_time = adur * 0.55
-    for ss, se, txt in words:
-        wl = txt.lower().strip('.,!?')
-        if wl in ('like', 'yes', 'no', 'type', 'was', 'would', 'who', 'am'):
-            found_cta = False
-            for ss2, se2, txt2 in words:
-                if ss2 >= ss and 'subscribe' in txt2.lower():
-                    found_cta = True
-                    break
-            if found_cta:
-                sub_word_time = max(ss - 0.5, 0)
-                break
-    for ss, se, txt in words:
-        if 'subscribe' in txt.lower():
-            sub_word_time = min(sub_word_time, ss - 1.0)
-            break
+    # Subscribe overlay: show MULTIPLE times throughout video for max subscribe reminders
     _has_sub_vid = os.path.exists(SUBSCRIBE_VID)
     sub_times = []
     if _has_sub_vid:
@@ -206,17 +190,29 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
             while t < adur - 15:
                 candidates.append(t)
                 t += interval + random.uniform(-20, 20)
-            candidates.append(sub_word_time)
             candidates.sort()
             final = []
             for c in candidates:
                 if not final or (c - final[-1]) >= 30:
                     final.append(c)
-                elif c == sub_word_time:
-                    final[-1] = c
+                else:
+                    pass
             sub_times = final[:6]
         else:
-            sub_times = [sub_word_time]
+            # Shorts: show subscribe 3 times — early, mid, CTA
+            t1 = adur * 0.15
+            t2 = adur * 0.50
+            t3 = adur * 0.75
+            for ss, se, txt in words:
+                if 'subscribe' in txt.lower():
+                    t3 = max(ss - 1.0, t2 + 3)
+                    break
+                if txt.lower().strip('.,!?') in ('like', 'type', 'was', 'would', 'who'):
+                    for ss2, se2, txt2 in words:
+                        if ss2 >= ss and 'subscribe' in txt2.lower():
+                            t3 = max(ss - 0.5, t2 + 3)
+                            break
+            sub_times = [round(t1, 1), round(t2, 1), round(t3, 1)]
 
     sfx_events = get_sfx_events(words, subscribe_times=sub_times if sub_times else None)
     print(f"Audio SFX: {len(sfx_events)}")
