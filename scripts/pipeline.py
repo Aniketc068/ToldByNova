@@ -199,20 +199,18 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
                     pass
             sub_times = final[:6]
         else:
-            # Shorts: show subscribe 3 times — early, mid, CTA
-            t1 = adur * 0.15
-            t2 = adur * 0.50
-            t3 = adur * 0.75
-            for ss, se, txt in words:
-                if 'subscribe' in txt.lower():
-                    t3 = max(ss - 1.0, t2 + 3)
-                    break
-                if txt.lower().strip('.,!?') in ('like', 'type', 'was', 'would', 'who'):
-                    for ss2, se2, txt2 in words:
-                        if ss2 >= ss and 'subscribe' in txt2.lower():
-                            t3 = max(ss - 0.5, t2 + 3)
-                            break
-            sub_times = [round(t1, 1), round(t2, 1), round(t3, 1)]
+            # Shorts: show subscribe 3 times with gaps (appear-disappear-appear)
+            _sub_clip_dur = dur(SUBSCRIBE_VID)
+            _gap = 2.0
+            t1 = 1.0
+            t2 = t1 + _sub_clip_dur + _gap
+            t3 = t2 + _sub_clip_dur + _gap
+            if t3 + _sub_clip_dur > adur:
+                t3 = adur - _sub_clip_dur
+            if t3 <= t2 + _sub_clip_dur:
+                sub_times = [round(t1, 1), round(t2, 1)]
+            else:
+                sub_times = [round(t1, 1), round(t2, 1), round(t3, 1)]
 
     sfx_events = get_sfx_events(words, subscribe_times=sub_times if sub_times else None)
     print(f"Audio SFX: {len(sfx_events)}")
