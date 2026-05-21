@@ -1841,14 +1841,20 @@ RULES FOR SHORT SCRIPT (field: "script"):
   BAD HOOKS (vague + generic): "My boss was terrible." / "My neighbor was rude to me." / "Something crazy happened." / "My ex did something unforgivable."
   THE RULE: First sentence must have a SPECIFIC bizarre detail. "Boss demanded rules" = generic. "Boss made me count 47,000 paperclips" = specific + bizarre.
 - HOOK (first sentence): A shocking accusation with ONE bizarre specific detail, under 10 words.
-- Structure: Hook → Escalation → SECOND HOOK → Twist → CTA → Loop Cliffhanger (LAST LINE)
+- Structure: Hook → Escalation → SECOND HOOK → MID-CTA → Twist → END-CTA → Loop Cliffhanger
 - CONTROVERSY RULE: The story MUST make viewers pick a side. Include a morally gray moment where the "hero" does something questionable. Viewers should DEBATE in comments whether they were right or wrong.
 - SECOND HOOK (at ~14-15 second mark, around word 38-42 in script):
   YouTube algorithm checks retention at 15s — this is the "sustained distribution gate". You MUST insert a SURPRISE sentence here that re-hooks the viewer.
   Examples: "But here's what nobody expected." / "That's when she found the hidden camera." / "What he said next shocked everyone."
   This must be a NEW revelation mid-story, not a recap. One shocking sentence that makes them NEED to keep watching.
-- CTA (subscribe/follow) comes BEFORE the loop ending: "{short_cta}"
-  This reminds viewer to subscribe WHILE the story tension is still high.
+- MID-CTA (right after second hook, around word 42-48 — THIS IS CRITICAL FOR LIKES):
+  Insert ONE short engagement sentence that asks viewer to react WHILE they are hooked.
+  This is the #1 way to get likes. Viewer is emotionally invested at this point — ask them to act NOW.
+  MUST use one of these: "Like this if you think she was wrong." / "Double tap if this makes you angry." / "Like if you saw this coming."
+  Keep it under 8 words. It must feel natural, not forced. Then CONTINUE the story immediately.
+  EXAMPLE: "...But here's what nobody expected. Like this if you think she deserved it. She pulled out her phone and..."
+- END-CTA (comes BEFORE the loop ending): "{short_cta}"
+  This is the full CTA with subscribe + comment. Placed while story tension is still high.
 - SEAMLESS LOOP TRICK (THE VERY LAST LINE OF THE SCRIPT — MANDATORY):
   YouTube Shorts loop automatically. The VERY LAST sentence of the entire script (AFTER CTA) MUST be an open-ended cliffhanger. When video loops back to the HOOK, viewer thinks the story CONTINUES. They should NOT notice the restart.
   SCRIPT ORDER: [Story]... [CTA: subscribe/follow]... [LAST LINE: loop cliffhanger]
@@ -1879,7 +1885,12 @@ SEO RULES:
   GOOD TITLES: "He Sued Red Bull Because It Didn't Give Him Wings" / "She Found His Secret Phone" / "Karen's Midnight Raid Backfires"
   THE TEST: Would someone screenshot this title and send it to a friend? If not, rewrite it.
   MUST be UNIQUE — never similar to: {used_list}
-- short_seo.description: START with the most shocking sentence from the story (no hashtags at start!), then summary, then "Subscribe to @ToldByNova", then LAST LINE = exactly 3 hashtags (#shorts + 2 story-specific). NEVER start description with a hashtag.
+- short_seo.description: FORMAT MUST BE:
+  LINE 1: A provocative YES/NO question about the story (gets clicks from search). Example: "Was she wrong for exposing him?"
+  LINE 2: The most shocking sentence from the story.
+  LINE 3: Short summary (1 sentence).
+  LINE 4: "Like if you agree. Subscribe to @ToldByNova"
+  LAST LINE: exactly 3 hashtags (#shorts + 2 story-specific). NEVER start description with a hashtag.
 - short_seo.tags: 20 comma-separated tags starting with "shorts", mix trending + story-specific
 - All category: Entertainment
 
@@ -2064,12 +2075,12 @@ Raw story:
 
 SHORT SCRIPT RULES:
 - Target: {dur} seconds. Script MUST be {words_min}-{words_max} words (voice reads at ~2.7 words/sec).
-- HOOK (first sentence): Shocking statement or question under 10 words that stops the scroll.
-- Structure: Hook → Escalation → SECOND HOOK → Twist → CTA → Loop Cliffhanger (LAST LINE)
+- HOOK (first sentence): Shocking statement with ONE bizarre specific detail, under 10 words.
+- Structure: Hook → Escalation → SECOND HOOK → MID-CTA → Twist → END-CTA → Loop Cliffhanger
 - SECOND HOOK (at ~14-15 second mark, around word 38-42): Insert a SURPRISE sentence that re-hooks the viewer. Example: "But here's what nobody expected." This is the algorithm's "sustained distribution gate".
-- CTA goes BEFORE the loop ending: "{short_cta}" — this reminds viewer to subscribe while tension is high.
+- MID-CTA (right after second hook, ~word 42-48): ONE short like-request. "Like this if you think she was wrong." / "Double tap if this makes you angry." Keep under 8 words, then continue story immediately. This is CRITICAL for getting likes.
+- END-CTA goes BEFORE the loop ending: "{short_cta}" — full subscribe + comment CTA while tension is high.
 - SEAMLESS LOOP TRICK (MANDATORY — VERY LAST LINE): After CTA, the FINAL sentence must be an open-ended cliffhanger so when video loops to the HOOK, viewer thinks story CONTINUES. End with: "But that wasn't even the worst part." / "And then everything changed." / "Little did he know..." / "But what happened next changed everything." NEVER end with: "Justice was served" / "He got what he deserved" / "She won" / "It was finally over". TEST: read your last line → then your hook. Must feel like ONE continuous story.
-- NO subscribe/follow CTA in the middle of the story. CTA only near the end, before the loop cliffhanger.
 - Short punchy sentences, 1 thought per sentence, natural female narrator voice.
 
 CLIP SUGGESTIONS: Suggest 5-6 search keywords matching STORY MOOD and THEME. NOT generic satisfying/ASMR. 2-4 words each.
@@ -2921,14 +2932,14 @@ def _auto_reply_comments(video_id, duration_minutes=60, max_replies=5):
     print(f"[COMMENTS] Auto-reply started for {video_id} ({duration_minutes}min, max {max_replies})")
 
     reply_templates = [
-        "Right?! What would YOU have done though? I need to know 👀",
-        "This one was WILD. But wait till you see tomorrow's story 🔥",
-        "Exactly! But do you think they went too far? Be honest 💭",
-        "You're so right! Like and subscribe if you want part 2 of this 👆",
-        "I couldn't believe it either! Drop a 🔥 if you want more stories like this",
-        "The real question is... was it justified? Tell me below 👇",
-        "Your take is interesting! But what about the other side? 🤔",
-        "Facts! Share this with someone who needs to hear it 📲",
+        "Right?! But was it actually justified? Like this video if you agree 👆",
+        "WILD story! Like + subscribe if you want part 2 🔥 What would YOU have done?",
+        "Exactly! But did they go too far? Hit like if you think YES 👀",
+        "I couldn't believe it either! Share this with someone who needs to see it 📲",
+        "The real question is... who was ACTUALLY wrong here? Like if you know 👇",
+        "Your take is interesting! Subscribe for daily stories like this 🔔 Do you think the other side was right?",
+        "Facts! Double tap if this made you angry 😤 Tell your friends about this one",
+        "Wait till you see tomorrow's story... subscribe so you don't miss it 🔔 Was this karma or too much?",
     ]
 
     while time.time() - start < duration_minutes * 60 and reply_count < max_replies:
