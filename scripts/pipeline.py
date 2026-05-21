@@ -429,7 +429,11 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
                 f"[{overlay_idx}:v]chromakey={chroma},{sub_scale}[{sub_label}]"
             )
             y_pos = "550" if landscape else "(H*3/5)"
-            enable_expr = " + ".join(f"between(t,{st},{adur})" for st in sub_times)
+            enable_parts = []
+            for st in sub_times:
+                et = min(st + sub_dur, adur)
+                enable_parts.append(f"between(t,{st:.1f},{et:.1f})")
+            enable_expr = "+".join(enable_parts)
             fc_parts.append(
                 f"[{prev_label}][{sub_label}]overlay=(W-w)/2:{y_pos}:enable='{enable_expr}':eof_action=pass[after_sub]"
             )
