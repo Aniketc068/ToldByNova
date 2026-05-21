@@ -1626,20 +1626,17 @@ def normalize_story(s):
         ]
         import random as _rnd
 
-        # Split into sentences, separate story body from CTA and ending
+        # Split into sentences, strip any CTA, keep pure story + loop ending
         sentences = [x.strip() for x in script.split(". ") if x.strip()]
         story_parts = []
-        cta_parts = []
         ending_part = None
 
         for sent in sentences:
             sl = sent.lower()
-            if 'subscribe' in sl or 'follow' in sl or 'comment' in sl:
-                cta_parts.append(sent)
-            else:
-                story_parts.append(sent)
+            if 'subscribe' in sl or 'follow' in sl or 'like and' in sl or 'comment below' in sl or 'double tap' in sl:
+                continue
+            story_parts.append(sent)
 
-        # Check if last story sentence is already a good open ending
         if story_parts:
             last = story_parts[-1].lower().rstrip(".")
             is_closed = any(closed in last for closed in _closed_endings)
@@ -1657,21 +1654,8 @@ def normalize_story(s):
         else:
             ending_part = _rnd.choice(_open_endings)
 
-        _viral_ctas = [
-            "Was this justified? Type YES or NO. Like and subscribe for more.",
-            "Would you have done the same? Comment below. Like if you agree.",
-            "Who was wrong here? Drop your answer. Hit like and subscribe.",
-            "Am I wrong for this? Tell me in the comments. Like and subscribe.",
-        ]
-        has_subscribe = any('subscribe' in c.lower() for c in cta_parts)
-        if not cta_parts:
-            cta_parts = [random.choice(_viral_ctas)]
-        elif not has_subscribe:
-            cta_parts.append("Like and subscribe for more stories like this.")
-
-        # Rebuild: Story → CTA → Loop cliffhanger
+        # Rebuild: Pure Story → Loop cliffhanger (NO CTA)
         script = ". ".join(story_parts).rstrip(". ") + ". "
-        script += ". ".join(cta_parts).rstrip(". ") + ". "
         script += ending_part
         if not script.endswith("."):
             script += "."
@@ -1790,16 +1774,7 @@ def generate_stories():
     words_max = int(dur * 3)
     print(f"Story mode: SHORT ONLY | short={dur}s ({words_min}-{words_max}w)")
 
-    cta_options = [
-        "Was she wrong? Type YES or NO. Like and subscribe for more.",
-        "Would you have done the same? Comment below. Like if you agree.",
-        "Who was wrong here? Drop your answer. Hit like and subscribe.",
-        "Type 1 if she was right, 2 if he was. Like this and subscribe.",
-        "Am I wrong for this? Tell me in the comments. Like and subscribe.",
-        "What would you have done? Comment NOW. Double tap and subscribe.",
-    ]
-    short_cta = random.choice(cta_options)
-    json_format = f"""{{"stories":[{{"title":"Short searchable title with keyword","hook":"Shocking first sentence under 10 words","script":"MANDATORY complete SHORT narration {words_min}-{words_max} words ending with {short_cta}","dramatic_words":["word1","word2","word3","word4","word5"],"mood":"dramatic","clip_suggestions":["search term 1","search term 2","search term 3","search term 4","search term 5"],"short_seo":{{"yt_title":"Viral YT Shorts title under 50 chars","description":"#shorts #storytime #redditstories + hook + summary + Follow @ToldByNova","tags":"shorts,storytime,viral,reddit stories,true story,justice,revenge,karma,real stories,plus 10 story-specific tags","category":"Entertainment"}}}}]}}"""
+    json_format = f"""{{"stories":[{{"title":"Short searchable title with keyword","hook":"Shocking first sentence under 10 words","script":"MANDATORY complete SHORT narration {words_min}-{words_max} words — PURE STORY with loop cliffhanger ending, NO subscribe/like/comment CTA anywhere","dramatic_words":["word1","word2","word3","word4","word5"],"mood":"dramatic","clip_suggestions":["search term 1","search term 2","search term 3","search term 4","search term 5"],"short_seo":{{"yt_title":"Viral YT Shorts title under 50 chars","description":"#shorts #storytime #redditstories + hook + summary + Follow @ToldByNova","tags":"shorts,storytime,viral,reddit stories,true story,justice,revenge,karma,real stories,plus 10 story-specific tags","category":"Entertainment"}}}}]}}"""
 
     base_rules = f"""Generate SHORT script only.
 
@@ -1855,27 +1830,20 @@ RULES FOR SHORT SCRIPT (field: "script"):
   YouTube algorithm checks retention at 15s — this is the "sustained distribution gate". You MUST insert a SURPRISE sentence here that re-hooks the viewer.
   Examples: "But here's what nobody expected." / "That's when she found the hidden camera." / "What he said next shocked everyone."
   This must be a NEW revelation mid-story, not a recap. One shocking sentence that makes them NEED to keep watching.
-- MID-CTA (right after second hook, around word 42-48 — THIS IS CRITICAL FOR LIKES):
-  Insert ONE short engagement sentence that asks viewer to react WHILE they are hooked.
-  This is the #1 way to get likes. Viewer is emotionally invested at this point — ask them to act NOW.
-  MUST use one of these: "Like this if you think she was wrong." / "Double tap if this makes you angry." / "Like if you saw this coming."
-  Keep it under 8 words. It must feel natural, not forced. Then CONTINUE the story immediately.
-  EXAMPLE: "...But here's what nobody expected. Like this if you think she deserved it. She pulled out her phone and..."
-- END-CTA (comes BEFORE the loop ending): "{short_cta}"
-  This is the full CTA with subscribe + comment. Placed while story tension is still high.
+- NO CTA IN SCRIPT — ZERO. NO "like", "subscribe", "comment", "follow" anywhere in the script.
+  The subscribe button overlay handles subscribe visually. Pinned comment handles engagement.
+  Every word in the script must be PURE STORY. Any CTA breaks the viewer's immersion and they swipe away.
+  Analytics show 83% viewers leave in 6 seconds — we cannot waste a single second on non-story words.
 - SEAMLESS LOOP TRICK (THE VERY LAST LINE OF THE SCRIPT — MANDATORY):
-  YouTube Shorts loop automatically. The VERY LAST sentence of the entire script (AFTER CTA) MUST be an open-ended cliffhanger. When video loops back to the HOOK, viewer thinks the story CONTINUES. They should NOT notice the restart.
-  SCRIPT ORDER: [Story]... [CTA: subscribe/follow]... [LAST LINE: loop cliffhanger]
+  YouTube Shorts loop automatically. The VERY LAST sentence MUST be an open-ended cliffhanger. When video loops back to the HOOK, viewer thinks the story CONTINUES. They should NOT notice the restart.
+  SCRIPT ORDER: [Hook]... [Story]... [Twist]... [LAST LINE: loop cliffhanger] — that's it, no CTA.
   HOW: End with a mysterious/unresolved line → viewer hears the hook again → thinks it's what happens next.
   EXAMPLE 1:
-    Script ends: "...Subscribe for more stories like this. But she had no idea what I was planning next."
+    Script ends: "...But she had no idea what I was planning next."
     → Loops to hook: "My neighbor called the cops on me for the last time." ← viewer thinks THIS is the plan!
   EXAMPLE 2:
-    Script ends: "...Follow for more stories. And that's when the real story began."
+    Script ends: "...And that's when the real story began."
     → Loops to hook: "She caught him with her best friend." ← viewer thinks THIS is the real story!
-  EXAMPLE 3:
-    Script ends: "...Subscribe if you want to know what happened next. But what happened next... no one saw it coming."
-    → Loops to hook: "He fired me in front of everyone." ← feels continuous!
   BANNED LAST LINES (NEVER end with these):
     "Justice was served." / "She finally got peace." / "He got what he deserved." / "The case was closed." / "Everything worked out." / "She won." / "He was arrested." / "Karma came through." / "It was finally over." / "They never spoke again."
   GOOD LAST LINES (use one of these or similar as the FINAL sentence):
@@ -2063,16 +2031,7 @@ def refine_story(raw_text):
     dur = bot.max_duration if bot.max_duration > 0 else random.randint(28, 33)
     words_min = int(dur * 2.5)
     words_max = int(dur * 3)
-    cta_options = [
-        "Was she wrong? Type YES or NO. Like and subscribe for more.",
-        "Would you have done the same? Comment below. Like if you agree.",
-        "Who was wrong here? Drop your answer. Hit like and subscribe.",
-        "Type 1 if she was right, 2 if he was. Like this and subscribe.",
-        "Am I wrong for this? Tell me in the comments. Like and subscribe.",
-        "What would you have done? Comment NOW. Double tap and subscribe.",
-    ]
-    short_cta = random.choice(cta_options)
-    json_fmt = f"""{{"title":"Short searchable title","script":"Short narration {words_min}-{words_max} words.","dramatic_words":["word1","word2","word3"],"mood":"dramatic","clip_suggestions":["term1","term2","term3","term4","term5"]}}"""
+    json_fmt = f"""{{"title":"Short searchable title","script":"Short narration {words_min}-{words_max} words — PURE STORY, no CTA.","dramatic_words":["word1","word2","word3"],"mood":"dramatic","clip_suggestions":["term1","term2","term3","term4","term5"]}}"""
 
     prompt = f"""TASK: Rewrite this raw story as a YouTube Shorts narration script. Output ONLY raw JSON, no markdown, no code blocks.
 
@@ -2083,12 +2042,11 @@ Raw story:
 
 SHORT SCRIPT RULES:
 - Target: {dur} seconds. Script MUST be {words_min}-{words_max} words (voice reads at ~2.7 words/sec).
-- HOOK (first sentence): Shocking statement with ONE bizarre specific detail, under 10 words.
-- Structure: Hook → Escalation → SECOND HOOK → MID-CTA → Twist → END-CTA → Loop Cliffhanger
+- HOOK (first sentence): Shocking statement with ONE bizarre specific detail + a NUMBER. Under 10 words.
+- Structure: Hook → Escalation → SECOND HOOK → Twist → Loop Cliffhanger — PURE STORY, NO CTA.
 - SECOND HOOK (at ~14-15 second mark, around word 38-42): Insert a SURPRISE sentence that re-hooks the viewer. Example: "But here's what nobody expected." This is the algorithm's "sustained distribution gate".
-- MID-CTA (right after second hook, ~word 42-48): ONE short like-request. "Like this if you think she was wrong." / "Double tap if this makes you angry." Keep under 8 words, then continue story immediately. This is CRITICAL for getting likes.
-- END-CTA goes BEFORE the loop ending: "{short_cta}" — full subscribe + comment CTA while tension is high.
-- SEAMLESS LOOP TRICK (MANDATORY — VERY LAST LINE): After CTA, the FINAL sentence must be an open-ended cliffhanger so when video loops to the HOOK, viewer thinks story CONTINUES. End with: "But that wasn't even the worst part." / "And then everything changed." / "Little did he know..." / "But what happened next changed everything." NEVER end with: "Justice was served" / "He got what he deserved" / "She won" / "It was finally over". TEST: read your last line → then your hook. Must feel like ONE continuous story.
+- NO CTA — ZERO "like", "subscribe", "comment", "follow" in the script. Every word must be story.
+- SEAMLESS LOOP TRICK (MANDATORY — VERY LAST LINE): The FINAL sentence must be an open-ended cliffhanger so when video loops to the HOOK, viewer thinks story CONTINUES. End with: "But that wasn't even the worst part." / "And then everything changed." / "Little did he know..." NEVER end with: "Justice was served" / "He got what he deserved" / "She won" / "It was finally over". TEST: read your last line then your hook. Must feel like ONE continuous story.
 - Short punchy sentences, 1 thought per sentence, natural female narrator voice.
 
 CLIP SUGGESTIONS: Suggest 5-6 search keywords matching STORY MOOD and THEME. NOT generic satisfying/ASMR. 2-4 words each.
