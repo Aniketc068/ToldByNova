@@ -50,7 +50,8 @@ function Get-DocStatus {
     $url = "https://docs.google.com/document/d/$DOC_ID/export?format=txt"
     try {
         $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10 -UserAgent "Mozilla/5.0"
-        $text = $response.Content.Trim()
+        $text = $response.Content -replace '﻿',''
+        $text = $text.Trim()
         $status = @{}
         foreach ($line in $text -split "`n") {
             $line = $line.Trim()

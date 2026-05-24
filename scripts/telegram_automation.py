@@ -5,6 +5,7 @@ Full pipeline: story -> voice -> clips -> build -> preview -> YouTube upload
 import os, sys, json, time, re, subprocess, random, hashlib, shutil, threading
 import urllib.request, urllib.error
 
+_NO_WIN = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 
 PROJECT = os.environ.get("NOVA_PROJECT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -82,7 +83,20 @@ def save_json(path, data):
         tmp = path + ".tmp"
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, path)
+        for _retry in range(5):
+            try:
+                os.replace(tmp, path)
+                return
+            except OSError:
+                time.sleep(0.2)
+        try:
+            os.remove(path)
+            os.rename(tmp, path)
+        except:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            try: os.remove(tmp)
+            except: pass
 
 def _sanitize_saved_seo(seo):
     """Auto-fix pre-saved SEO data on load — strips #, caps tags, cleans title."""
@@ -910,7 +924,7 @@ def send_video(path, chat_id=None):
             r = subprocess.run(
                 ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
                  '-of', 'csv=p=0', path],
-                capture_output=True, text=True, timeout=30)
+                capture_output=True, text=True, timeout=30, creationflags=_NO_WIN)
             duration = float(r.stdout.strip())
         except:
             duration = 60
@@ -923,7 +937,7 @@ def send_video(path, chat_id=None):
                 '-c:v', 'h264_nvenc', '-preset', 'p4', '-b:v', f'{video_bitrate}k',
                 '-c:a', 'aac', '-b:a', '128k',
                 '-movflags', '+faststart', compressed
-            ], capture_output=True, text=True, timeout=600)
+            ], capture_output=True, text=True, timeout=600, creationflags=_NO_WIN)
             if gpu_comp.returncode != 0:
                 r = subprocess.run([
                     'ffmpeg', '-y', '-i', path,
@@ -931,7 +945,7 @@ def send_video(path, chat_id=None):
                     '-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', f'{video_bitrate}k',
                     '-c:a', 'aac', '-b:a', '128k',
                     '-movflags', '+faststart', compressed
-                ], capture_output=True, text=True, timeout=600)
+                ], capture_output=True, text=True, timeout=600, creationflags=_NO_WIN)
             else:
                 r = gpu_comp
             if r.returncode == 0 and os.path.exists(compressed):
@@ -949,7 +963,7 @@ def send_video(path, chat_id=None):
                         '-c:v', 'h264_nvenc', '-preset', 'p4', '-b:v', f'{video_bitrate}k',
                         '-c:a', 'aac', '-b:a', '96k',
                         '-movflags', '+faststart', compressed
-                    ], capture_output=True, text=True, timeout=600)
+                    ], capture_output=True, text=True, timeout=600, creationflags=_NO_WIN)
                     if gpu_comp2.returncode != 0:
                         r2 = subprocess.run([
                             'ffmpeg', '-y', '-i', path,
@@ -957,7 +971,7 @@ def send_video(path, chat_id=None):
                             '-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', f'{video_bitrate}k',
                             '-c:a', 'aac', '-b:a', '96k',
                             '-movflags', '+faststart', compressed
-                        ], capture_output=True, text=True, timeout=600)
+                        ], capture_output=True, text=True, timeout=600, creationflags=_NO_WIN)
                     else:
                         r2 = gpu_comp2
                     if r2.returncode == 0 and os.path.exists(compressed):
@@ -1239,7 +1253,7 @@ def try_ytdlp(url, filename):
         r = subprocess.run(
             ["yt-dlp","--impersonate","chrome","-o",out,
              "--format","best[ext=mp4]/best","--no-playlist","--max-filesize","500M",url],
-            capture_output=True, text=True, timeout=300)
+            capture_output=True, text=True, timeout=300, creationflags=_NO_WIN)
         if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 50000:
             return os.path.getsize(out) / (1024*1024)
     except: pass
@@ -1289,15 +1303,15 @@ def trim_last_5s(filepath):
     try:
         r = subprocess.run(
             ['ffprobe','-v','quiet','-show_entries','format=duration','-of','csv=p=0', filepath],
-            capture_output=True, text=True, timeout=10)
+            capture_output=True, text=True, timeout=10, creationflags=_NO_WIN)
         clip_dur = float(r.stdout.strip())
-        if clip_dur <= 7:
+        if clip_dur <= 6:
             return
         trimmed = filepath + ".trimmed.mp4"
         subprocess.run([
             'ffmpeg','-y','-i', filepath,'-t', str(clip_dur - 6),
             '-c','copy', trimmed
-        ], capture_output=True, timeout=30)
+        ], capture_output=True, timeout=30, creationflags=_NO_WIN)
         if os.path.exists(trimmed) and os.path.getsize(trimmed) > 10000:
             os.replace(trimmed, filepath)
         else:

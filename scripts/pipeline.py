@@ -1,7 +1,9 @@
 """Video pipeline: clips → segments → PRO effects → subs → SFX → subscribe → final
 Professional video effects: zoom punch, screen shake, white flash, color shifts,
 smooth slow-zoom Ken Burns, vignette pulse — looks human-edited, not AI."""
-import subprocess, os, re, random, time, json, shutil
+import subprocess, os, re, random, time, json, shutil, sys
+
+_NO_WIN = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PROJECT = os.environ.get("NOVA_PROJECT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,7 +27,7 @@ BGM_MOODS = {
 DEFAULT_BGM_MOOD = "dramatic"
 
 def run(cmd, timeout=600):
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=_NO_WIN)
     if r.returncode != 0 and r.stderr:
         print(f"    stderr: {r.stderr[-500:]}")
     return r
@@ -274,10 +276,10 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
                     '-filter_complex',fc,'-map','[out]','-an',
                     '-pix_fmt','yuv420p','-t',str(seg_dur + 0.15),'-r',str(FPS)]
             r = subprocess.run(base + gpu_fast + [tmp],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=45)
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=45, creationflags=_NO_WIN)
             if r.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) < 5000:
                 subprocess.run(base + cpu_fast + [tmp],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60, creationflags=_NO_WIN)
         else:
             vf = (f"setpts=PTS/{sp},"
                   f"scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,"
@@ -288,10 +290,10 @@ def build_video(voice_mp3, srt_file, clips_dir, output_path, music_file=None,
                     '-vf',vf,'-an',
                     '-pix_fmt','yuv420p','-t',str(seg_dur + 0.15),'-r',str(FPS)]
             r = subprocess.run(base + ['-c:v','h264_nvenc','-preset','p4','-rc','vbr','-cq','20'] + [tmp],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, creationflags=_NO_WIN)
             if r.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) < 5000:
                 subprocess.run(base + ['-c:v','libx264','-preset','fast','-crf','20'] + [tmp],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=45)
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=45, creationflags=_NO_WIN)
         return i, tmp
 
     seg_args = [(i, clip, clip_durs[clip]) for i, clip in enumerate(clip_queue)]
