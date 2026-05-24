@@ -2,7 +2,7 @@
 Telegram Automation Bot - Told By Nova
 Full pipeline: story -> voice -> clips -> build -> preview -> YouTube upload
 """
-import os, sys, json, time, re, subprocess, random, hashlib, shutil, threading
+import os, sys, json, time, re, subprocess, random, hashlib, shutil, threading, socket
 import urllib.request, urllib.error
 
 _NO_WIN = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
@@ -2923,6 +2923,9 @@ def _auto_reply_comments(video_id, duration_minutes=60, max_replies=5):
     ]
 
     while time.time() - start < duration_minutes * 60 and reply_count < max_replies:
+        if not _inet_ok():
+            time.sleep(30)
+            continue
         try:
             youtube = _get_youtube_client()
             resp = youtube.commentThreads().list(
@@ -2989,19 +2992,37 @@ def _check_video_is_public(video_id):
 
 _last_job_check = 0
 _active_comment_threads = set()
+_job_check_running = False
+
+
+def _inet_ok(timeout=3):
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
 
 def _periodic_job_check():
     """Called from main loop every ~5 min. Catches jobs where threads died."""
-    global _last_job_check
+    global _last_job_check, _job_check_running
     now = time.time()
     if now - _last_job_check < 300:
         return
+    if _job_check_running:
+        return
     _last_job_check = now
+    if not _inet_ok():
+        print("[JOBS-CHECK] No internet, skipping")
+        return
+    _job_check_running = True
     try:
         jobs = load_json(JOBS_FILE, [])
     except:
+        _job_check_running = False
         return
     if not jobs:
+        _job_check_running = False
         return
     for job in jobs:
         try:
@@ -3023,6 +3044,7 @@ def _periodic_job_check():
                     _send_admin_msg(f"Pinned comment posted on {vid}")
         except Exception as _je:
             print(f"[JOBS-CHECK] Error processing job: {_je}")
+    _job_check_running = False
 
 
 def _resume_pending_jobs():
@@ -3039,7 +3061,7 @@ def _resume_pending_jobs():
             print(f"[JOBS] Skipping {jid} — claimed by another system")
             continue
         if jtype == "post_comment":
-            is_public = _check_video_is_public(vid)
+            is_public = _check_video_is_public(vid) if _inet_ok() else None
             if is_public:
                 print(f"[JOBS] Video {vid} already public — posting comment immediately")
                 _remove_job(jid)
@@ -4833,7 +4855,7 @@ def main():
             except Exception as _sn_err:
                 print(f"[ERR] Slot notify: {_sn_err}")
             try:
-                _periodic_job_check()
+                threading.Thread(target=_periodic_job_check, daemon=True).start()
             except Exception as _jc_err:
                 print(f"[ERR] Job check: {_jc_err}")
         except urllib.error.HTTPError as e:
