@@ -1,8 +1,8 @@
-"""Voice generator: Edge TTS (Microsoft Emma Neural)"""
+"""Voice generator: Edge TTS (AvaMultilingual - most natural voice)"""
 import asyncio, edge_tts, os
 
-VOICE = "en-US-EmmaNeural"
-RATE = "+8%"
+VOICE = "en-US-AvaMultilingualNeural"
+RATE = "+5%"
 
 async def _edge_generate_async(text, out_dir, prefix):
     mp3 = f"{out_dir}/{prefix}.mp3"
